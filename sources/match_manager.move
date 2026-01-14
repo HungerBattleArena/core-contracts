@@ -172,3 +172,155 @@ public fun create_test_match(fighter: address, ctx: &mut TxContext): Match {
         lose_bets: table::new(ctx),
     }
 }
+
+    #[test]
+    fun test_create_match_success() {
+        let mut ctx = tx_context::dummy();
+
+        let sender = tx_context::sender(&ctx);
+        create_match(b"MyMatch", &mut ctx);
+
+        // Lấy object vừa public_share → không truy cập trực tiếp
+        // => test logic gián tiếp qua create_test_match
+        let m = create_test_match(sender, &mut ctx);
+
+        let (name, fighter, fighter_state, status, result, pool, viewers) =
+            match_state(&m);
+
+        assert!(name == string::utf8(b"TestMatch"), 1);
+        assert!(fighter == sender, 2);
+        assert!(fighter_state == FIGHTER_ALIVE, 3);
+        assert!(status == CREATED, 4);
+        assert!(option::is_none(&result), 5);
+        assert!(pool == 0, 6);
+        assert!(viewers == 0, 7);
+
+        transfer::transfer(m, @0x0);
+    }
+
+#[test]
+#[expected_failure] 
+fun test_create_match_name_too_long() {
+    let mut ctx = tx_context::dummy();
+
+    let long_name = b"123456789012345678901";
+
+    create_match(long_name, &mut ctx);
+}
+
+#[test]
+fun test_start_match_success() {
+    let mut ctx = tx_context::dummy();
+    let fighter = tx_context::sender(&ctx);
+
+    let mut m = create_test_match(fighter, &mut ctx);
+
+    start_match(&mut m, &mut ctx);
+
+    assert!(m.status == IN_GAME, 1);
+
+    transfer::transfer(m, @0x0);
+}
+
+#[test]
+#[expected_failure(abort_code = E_NOT_FIGHTER)]
+fun test_start_match_wrong_sender() {
+    let mut ctx = tx_context::dummy();
+    let fighter = @0x1;
+
+    let mut m = create_test_match(fighter, &mut ctx);
+    start_match(&mut m, &mut ctx);
+
+    transfer::transfer(m, @0x0);
+}
+
+#[test]
+fun test_end_match_win() {
+    let mut ctx = tx_context::dummy();
+    let fighter = tx_context::sender(&ctx);
+
+    let admin = create_test_admin(&mut ctx);
+    let mut m = create_test_match(fighter, &mut ctx);
+
+    start_match(&mut m, &mut ctx);
+    end_match(&admin, &mut m, true, &mut ctx);
+
+    assert!(m.status == ENDED, 1);
+    assert!(option::contains(&m.result, &true), 1);
+    assert!(m.fighter_state == FIGHTER_ALIVE, 3);
+
+    transfer::transfer(m, @0x0);
+    transfer::transfer(admin, @0x0);
+}
+
+#[test]
+fun test_end_match_lose() {
+    let mut ctx = tx_context::dummy();
+    let fighter = tx_context::sender(&ctx);
+
+    let admin = create_test_admin(&mut ctx);
+    let mut m = create_test_match(fighter, &mut ctx);
+
+    start_match(&mut m, &mut ctx);
+    end_match(&admin, &mut m, false, &mut ctx);
+
+    assert!(m.status == ENDED, 1);
+    assert!(option::contains(&m.result, &false), 1);
+    assert!(m.fighter_state == FIGHTER_DEAD, 3);
+
+    transfer::transfer(m, @0x0);
+    transfer::transfer(admin, @0x0);
+}
+
+#[test]
+fun test_match_state_view() {
+    let mut ctx = tx_context::dummy();
+    let fighter = tx_context::sender(&ctx);
+
+    let mut m = create_test_match(fighter, &mut ctx);
+
+    let (name, f, fighter_state, status, result, pool, viewers) =
+        match_state(&m);
+
+    assert!(name == string::utf8(b"TestMatch"), 1);
+    assert!(f == fighter, 2);
+    assert!(fighter_state == FIGHTER_ALIVE, 3);
+    assert!(status == CREATED, 4);
+    assert!(option::is_none(&result), 5);
+    assert!(pool == 0, 6);
+    assert!(viewers == 0, 7);
+
+    transfer::transfer(m, @0x0);
+}
+
+#[test]
+fun test_betting_info_view() {
+    let mut ctx = tx_context::dummy();
+    let fighter = tx_context::sender(&ctx);
+
+    let m = create_test_match(fighter, &mut ctx);
+
+    let (pool, win_total, lose_total, win_count, lose_count) =
+        betting_info(&m);
+
+    assert!(pool == 0, 1);
+    assert!(win_total == 0, 2);
+    assert!(lose_total == 0, 3);
+    assert!(win_count == 0, 4);
+    assert!(lose_count == 0, 5);
+
+    transfer::transfer(m, @0x0);
+}
+
+#[test]
+fun test_add_admin() {
+    let mut ctx = tx_context::dummy();
+
+    let admin = create_test_admin(&mut ctx);
+    let new_admin = @0x2;
+
+    add_admin(&admin, new_admin, &mut ctx);
+
+    transfer::transfer(admin, @0x0);
+}
+
