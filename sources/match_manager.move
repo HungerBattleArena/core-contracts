@@ -180,8 +180,6 @@ public fun create_test_match(fighter: address, ctx: &mut TxContext): Match {
         let sender = tx_context::sender(&ctx);
         create_match(b"MyMatch", &mut ctx);
 
-        // Lấy object vừa public_share → không truy cập trực tiếp
-        // => test logic gián tiếp qua create_test_match
         let m = create_test_match(sender, &mut ctx);
 
         let (name, fighter, fighter_state, status, result, pool, viewers) =
