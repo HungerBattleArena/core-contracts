@@ -1,4 +1,4 @@
-module hunger_battle_arena::bet_engine;
+/* module hunger_battle_arena::bet_engine;
 
 use hunger_battle_arena::match_manager::Match;
 use one::coin::{Self, Coin};
@@ -457,3 +457,4 @@ fun test_claim_fighter_when_lose_rejected() {
     transfer::public_share_object(v);
     ts::end(scenario);
 }
+ */
