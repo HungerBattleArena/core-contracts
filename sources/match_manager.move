@@ -1,15 +1,8 @@
 module hunger_battle_arena::match_manager;
 
-friend hunger_battle_arena::bet_engine;
-
 use one::event;
-use one::object::{Self, UID, ID};
 use one::table::{Self, Table};
-use one::transfer;
-use one::tx_context::{Self, TxContext};
-use std::option::{Self, Option};
 use std::string::{Self, String};
-use std::vector;
 
 const CREATED: u8 = 0;
 const IN_GAME: u8 = 1;
@@ -17,10 +10,8 @@ const ENDED: u8 = 2;
 
 const FIGHTER_ALIVE: u8 = 0;
 const FIGHTER_DEAD: u8 = 1;
-const FIGHTER_INACTIVE: u8 = 2;
 
 const E_NOT_FIGHTER: u64 = 0;
-const E_NOT_ADMIN: u64 = 1;
 const E_INVALID_STATE: u64 = 2;
 const E_ALREADY_ENDED: u64 = 3;
 const E_NOT_IN_GAME: u64 = 4;
@@ -58,7 +49,7 @@ fun init(ctx: &mut TxContext) {
     );
 }
 
-public entry fun add_admin(_: &AdminCap, new_admin: address, ctx: &mut TxContext) {
+public fun add_admin(_: &AdminCap, new_admin: address, ctx: &mut TxContext) {
     let new_cap = AdminCap { id: object::new(ctx) };
     transfer::transfer(new_cap, new_admin);
     event::emit(AdminAdded { new_admin });
@@ -79,7 +70,7 @@ public struct Match has key, store {
     lose_bets: Table<address, u64>,
 }
 
-public entry fun create_match(name_bytes: vector<u8>, ctx: &mut TxContext) {
+public fun create_match(name_bytes: vector<u8>, ctx: &mut TxContext) {
     let fighter = tx_context::sender(ctx);
     assert!(vector::length(&name_bytes) <= 20, E_NAME_TOO_LONG);
 
@@ -138,6 +129,64 @@ public fun end_match(_: &AdminCap, m: &mut Match, is_win: bool, _ctx: &mut TxCon
     });
 }
 
+public(package) fun is_created(m: &Match): bool {
+    m.status == CREATED
+}
+
+public(package) fun is_ended(m: &Match): bool {
+    m.status == ENDED && option::is_some(&m.result)
+}
+
+public(package) fun fighter(m: &Match): address {
+    m.fighter
+}
+
+public(package) fun result_value(m: &Match): bool {
+    *option::borrow(&m.result)
+}
+
+public(package) fun has_win_bet(m: &Match, bettor: address): bool {
+    table::contains(&m.win_bets, bettor)
+}
+
+public(package) fun has_lose_bet(m: &Match, bettor: address): bool {
+    table::contains(&m.lose_bets, bettor)
+}
+
+public(package) fun win_bet_amount(m: &Match, bettor: address): u64 {
+    *table::borrow(&m.win_bets, bettor)
+}
+
+public(package) fun lose_bet_amount(m: &Match, bettor: address): u64 {
+    *table::borrow(&m.lose_bets, bettor)
+}
+
+public(package) fun win_bets_total(m: &Match): u64 {
+    m.win_bets_total
+}
+
+public(package) fun lose_bets_total(m: &Match): u64 {
+    m.lose_bets_total
+}
+
+public(package) fun total_pool(m: &Match): u64 {
+    m.total_pool
+}
+
+public(package) fun add_win_bet(m: &mut Match, bettor: address, amount: u64) {
+    table::add(&mut m.win_bets, bettor, amount);
+    m.win_bets_total = m.win_bets_total + amount;
+    m.total_pool = m.total_pool + amount;
+    m.total_bet_viewers = m.total_bet_viewers + 1;
+}
+
+public(package) fun add_lose_bet(m: &mut Match, bettor: address, amount: u64) {
+    table::add(&mut m.lose_bets, bettor, amount);
+    m.lose_bets_total = m.lose_bets_total + amount;
+    m.total_pool = m.total_pool + amount;
+    m.total_bet_viewers = m.total_bet_viewers + 1;
+}
+
 
 public fun match_state(m: &Match): (String, address, u8, u8, Option<bool>, u64, u64) {
     (m.name, m.fighter, m.fighter_state, m.status, m.result, m.total_pool, m.total_bet_viewers)
@@ -155,6 +204,12 @@ public fun betting_info(m: &Match): (u64, u64, u64, u64, u64) {
 #[test_only]
 public fun create_test_admin(ctx: &mut TxContext): AdminCap {
     AdminCap { id: object::new(ctx) }
+}
+
+#[test_only]
+public fun destroy_test_admin(admin: AdminCap) {
+    let AdminCap { id } = admin;
+    object::delete(id);
 }
 
 #[test_only]
@@ -277,7 +332,7 @@ fun test_match_state_view() {
     let mut ctx = tx_context::dummy();
     let fighter = tx_context::sender(&ctx);
 
-    let mut m = create_test_match(fighter, &mut ctx);
+    let m = create_test_match(fighter, &mut ctx);
 
     let (name, f, fighter_state, status, result, pool, viewers) =
         match_state(&m);

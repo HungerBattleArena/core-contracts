@@ -2,7 +2,30 @@
 # This file should be checked in.
 
 [move]
-version = 4
+version = 3
+manifest_digest = "27345F42383BE1064C7AF7AE2C2A9AA55DA2CF62C09FF7A9E885C568A6E07A25"
+deps_digest = "3C4103934B1E040BB6B23F1D610B4EF9F2F1166A50A104EADCF77467C004C600"
+dependencies = [
+  { id = "MoveStdlib", name = "MoveStdlib" },
+  { id = "One", name = "One" },
+]
+
+[[move.package]]
+id = "MoveStdlib"
+source = { git = "https://github.com/one-chain-labs/onechain.git", rev = "main", subdir = "crates/sui-framework/packages/move-stdlib" }
+
+[[move.package]]
+id = "One"
+source = { git = "https://github.com/one-chain-labs/onechain.git", rev = "main", subdir = "crates/sui-framework/packages/one-framework" }
+
+dependencies = [
+  { id = "MoveStdlib", name = "MoveStdlib" },
+]
+
+[move.toolchain-version]
+compiler-version = "1.1.1"
+edition = "2024.beta"
+flavor = "one"
 
 [pinned.testnet.MoveStdlib]
 source = { git = "https://github.com/one-chain-labs/onechain.git", subdir = "crates/sui-framework/packages/move-stdlib", rev = "15a6c7b1f14c75ec1829a475172c41b5e6d31c85" }
