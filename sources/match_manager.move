@@ -1,5 +1,7 @@
 module hunger_battle_arena::match_manager;
 
+friend hunger_battle_arena::bet_engine;
+
 use one::event;
 use one::object::{Self, UID, ID};
 use one::table::{Self, Table};
@@ -321,4 +323,3 @@ fun test_add_admin() {
 
     transfer::transfer(admin, @0x0);
 }
-
