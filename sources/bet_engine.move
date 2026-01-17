@@ -1,6 +1,6 @@
 module hunger_battle_arena::bet_engine;
 
-use hunger_battle_arena::match_manager::{Self as match_manager, Match};
+use hunger_battle_arena::match_manager::{Self as match_manager, Match, Registry};
 use one::coin::{Self, Coin};
 use one::event;
 use one::oct::OCT;
@@ -59,7 +59,18 @@ public struct BetVault has key, store {
     fighter_claimed: bool,
 }
 
-public fun create_bet_vault(m: &Match, ctx: &mut TxContext) {
+#[allow(lint(share_owned))]
+public fun create_match_with_bet_vault(
+    registry: &mut Registry,
+    name_bytes: vector<u8>,
+    ctx: &mut TxContext,
+) {
+    let mut m = match_manager::create_match_internal(registry, name_bytes, ctx);
+    create_bet_vault(&mut m, ctx);
+    transfer::public_share_object(m);
+}
+
+public(package) fun create_bet_vault(m: &mut Match, ctx: &mut TxContext) {
     let sender = tx_context::sender(ctx);
     assert!(sender == match_manager::fighter(m), E_FIGHTER_ONLY);
 
@@ -70,6 +81,8 @@ public fun create_bet_vault(m: &Match, ctx: &mut TxContext) {
         claimed: table::new(ctx),
         fighter_claimed: false,
     };
+
+    match_manager::set_vault_id(m, object::id(&vault));
 
     event::emit(BetVaultCreated {
         match_id: object::id(m),
@@ -412,9 +425,9 @@ fun test_bet_and_claim_flow() {
     let viewer_lose = @0xC;
 
     let mut scenario = ts::begin(fighter);
-    let m = match_manager::create_test_match(fighter, scenario.ctx());
-    create_bet_vault(&m, scenario.ctx());
-    transfer::public_share_object(m);
+    let mut registry = match_manager::create_test_registry(scenario.ctx());
+    create_match_with_bet_vault(&mut registry, b"Room", scenario.ctx());
+    transfer::public_transfer(registry, @0x0);
 
     scenario.next_tx(viewer_win);
     let mut m: Match = scenario.take_shared();
@@ -470,15 +483,39 @@ fun test_bet_and_claim_flow() {
 }
 
 #[test]
+fun test_create_match_with_bet_vault() {
+    let fighter = @0xA;
+
+    let mut scenario = ts::begin(fighter);
+    let mut registry = match_manager::create_test_registry(scenario.ctx());
+    create_match_with_bet_vault(&mut registry, b"Room", scenario.ctx());
+
+    let ids = match_manager::get_match_ids(&registry);
+    assert!(vector::length(&ids) == 1, 1);
+    transfer::public_transfer(registry, @0x0);
+
+    scenario.next_tx(fighter);
+    let m: Match = scenario.take_shared();
+    let v: BetVault = scenario.take_shared();
+    let vault_id = match_manager::match_vault_id(&m);
+    assert!(option::is_some(&vault_id), 2);
+    assert!(v.match_id == object::id(&m), 3);
+
+    transfer::public_share_object(m);
+    transfer::public_share_object(v);
+    ts::end(scenario);
+}
+
+#[test]
 #[expected_failure(abort_code = E_BETS_LOCKED)]
 fun test_bet_when_in_game_rejected() {
     let fighter = @0xA;
     let viewer = @0xB;
 
     let mut scenario = ts::begin(fighter);
-    let m = match_manager::create_test_match(fighter, scenario.ctx());
-    create_bet_vault(&m, scenario.ctx());
-    transfer::public_share_object(m);
+    let mut registry = match_manager::create_test_registry(scenario.ctx());
+    create_match_with_bet_vault(&mut registry, b"Room", scenario.ctx());
+    transfer::public_transfer(registry, @0x0);
 
     scenario.next_tx(fighter);
     let mut m: Match = scenario.take_shared();
@@ -503,9 +540,9 @@ fun test_double_claim_rejected() {
     let viewer = @0xB;
 
     let mut scenario = ts::begin(fighter);
-    let m = match_manager::create_test_match(fighter, scenario.ctx());
-    create_bet_vault(&m, scenario.ctx());
-    transfer::public_share_object(m);
+    let mut registry = match_manager::create_test_registry(scenario.ctx());
+    create_match_with_bet_vault(&mut registry, b"Room", scenario.ctx());
+    transfer::public_transfer(registry, @0x0);
 
     scenario.next_tx(viewer);
     let mut m: Match = scenario.take_shared();
@@ -548,9 +585,9 @@ fun test_loser_claim_rejected() {
     let viewer_lose = @0xC;
 
     let mut scenario = ts::begin(fighter);
-    let m = match_manager::create_test_match(fighter, scenario.ctx());
-    create_bet_vault(&m, scenario.ctx());
-    transfer::public_share_object(m);
+    let mut registry = match_manager::create_test_registry(scenario.ctx());
+    create_match_with_bet_vault(&mut registry, b"Room", scenario.ctx());
+    transfer::public_transfer(registry, @0x0);
 
     scenario.next_tx(viewer_win);
     let mut m: Match = scenario.take_shared();
@@ -593,9 +630,9 @@ fun test_claim_fighter_when_lose_rejected() {
     let viewer = @0xB;
 
     let mut scenario = ts::begin(fighter);
-    let m = match_manager::create_test_match(fighter, scenario.ctx());
-    create_bet_vault(&m, scenario.ctx());
-    transfer::public_share_object(m);
+    let mut registry = match_manager::create_test_registry(scenario.ctx());
+    create_match_with_bet_vault(&mut registry, b"Room", scenario.ctx());
+    transfer::public_transfer(registry, @0x0);
 
     scenario.next_tx(viewer);
     let mut m: Match = scenario.take_shared();

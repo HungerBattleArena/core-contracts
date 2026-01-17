@@ -11,14 +11,12 @@ const CREATED: u8 = 0;
 const IN_GAME: u8 = 1;
 const ENDED: u8 = 2;
 
-const FIGHTER_ALIVE: u8 = 0;
-const FIGHTER_DEAD: u8 = 1;
-
 const E_NOT_FIGHTER: u64 = 0;
 const E_INVALID_STATE: u64 = 2;
 const E_ALREADY_ENDED: u64 = 3;
 const E_NOT_IN_GAME: u64 = 4;
 const E_NAME_TOO_LONG: u64 = 5;
+const E_VAULT_ALREADY_SET: u64 = 6;
 
 /* ===================== EVENTS ===================== */
 
@@ -50,9 +48,11 @@ public struct AdminCap has key, store {
 
 public struct MatchView has copy, drop, store {
     match_id: object::ID,
+    vault_id: Option<object::ID>,
     name: String,
     fighter: address,
     status: u8,
+    result: Option<bool>,
     total_pool: u64,
     total_bet_viewers: u64,
     win_bets_total: u64,
@@ -72,9 +72,9 @@ public struct Registry has key, store {
 
 public struct Match has key, store {
     id: object::UID,
+    vault_id: Option<object::ID>,
     name: String,
     fighter: address,
-    fighter_state: u8,
     status: u8,
     result: Option<bool>,
     total_pool: u64,
@@ -103,11 +103,11 @@ fun init(ctx: &mut TxContext) {
 
 /* ===================== MATCH CORE FUNCTION ===================== */
 
-public fun create_match(
+public(package) fun create_match_internal(
     registry: &mut Registry,
     name_bytes: vector<u8>,
     ctx: &mut TxContext,
-) {
+): Match {
     assert!(vector::length(&name_bytes) <= 20, E_NAME_TOO_LONG);
 
     let fighter = tx_context::sender(ctx);
@@ -115,9 +115,9 @@ public fun create_match(
 
     let m = Match {
         id: object::new(ctx),
+        vault_id: option::none(),
         name,
         fighter,
-        fighter_state: FIGHTER_ALIVE,
         status: CREATED,
         result: option::none(),
         total_pool: 0,
@@ -138,7 +138,7 @@ public fun create_match(
         name: m.name,
     });
 
-    transfer::public_share_object(m);
+    m
 }
 
 public fun start_match(m: &mut Match, ctx: &mut TxContext) {
@@ -163,7 +163,6 @@ public fun end_match(
 
     m.status = ENDED;
     m.result = option::some(is_win);
-    m.fighter_state = if (is_win) { FIGHTER_ALIVE } else { FIGHTER_DEAD };
 
     event::emit(MatchEnded {
         match_id: object::id(m),
@@ -181,9 +180,11 @@ public fun get_match_ids(registry: &Registry): vector<object::ID> {
 public fun match_view(m: &Match): MatchView {
     MatchView {
         match_id: object::id(m),
+        vault_id: m.vault_id,
         name: m.name,
         fighter: m.fighter,
         status: m.status,
+        result: m.result,
         total_pool: m.total_pool,
         total_bet_viewers: m.total_bet_viewers,
         win_bets_total: m.win_bets_total,
@@ -193,18 +194,8 @@ public fun match_view(m: &Match): MatchView {
     }
 }
 
-public fun match_state(
-    m: &Match,
-): (String, address, u8, u8, Option<bool>, u64, u64) {
-    (
-        m.name,
-        m.fighter,
-        m.fighter_state,
-        m.status,
-        m.result,
-        m.total_pool,
-        m.total_bet_viewers,
-    )
+public fun match_vault_id(m: &Match): Option<object::ID> {
+    m.vault_id
 }
 
 public(package) fun is_created(m: &Match): bool {
@@ -251,6 +242,11 @@ public(package) fun total_pool(m: &Match): u64 {
     m.total_pool
 }
 
+public(package) fun set_vault_id(m: &mut Match, vault_id: object::ID) {
+    assert!(option::is_none(&m.vault_id), E_VAULT_ALREADY_SET);
+    m.vault_id = option::some(vault_id);
+}
+
 public(package) fun add_win_bet(m: &mut Match, bettor: address, amount: u64) {
     table::add(&mut m.win_bets, bettor, amount);
     m.win_bets_total = m.win_bets_total + amount;
@@ -279,9 +275,9 @@ public(package) fun create_test_registry(ctx: &mut TxContext): Registry {
 public(package) fun create_test_match(fighter: address, ctx: &mut TxContext): Match {
     Match {
         id: object::new(ctx),
+        vault_id: option::none(),
         name: string::utf8(b"TestMatch"),
         fighter,
-        fighter_state: FIGHTER_ALIVE,
         status: CREATED,
         result: option::none(),
         total_pool: 0,
@@ -316,10 +312,11 @@ fun test_create_match_success() {
     let mut ctx = tx_context::dummy();
     let mut registry = create_test_registry(&mut ctx);
 
-    create_match(&mut registry, b"MyMatch", &mut ctx);
+    let m = create_match_internal(&mut registry, b"MyMatch", &mut ctx);
 
     let ids = get_match_ids(&registry);
     assert!(vector::length(&ids) == 1, 1);
+    transfer::transfer(m, @0x0);
     transfer::transfer(registry, @0x0);
 }
 
@@ -333,7 +330,7 @@ fun test_start_match_success() {
     let fighter = tx_context::sender(&ctx);
 
     let mut registry = create_test_registry(&mut ctx);
-    create_match(&mut registry, b"TestMatch", &mut ctx);
+    let m_created = create_match_internal(&mut registry, b"TestMatch", &mut ctx);
 
     let mut m = create_test_match(fighter, &mut ctx);
     start_match(&mut m, &mut ctx);
@@ -344,6 +341,7 @@ fun test_start_match_success() {
     assert!(v.status == IN_GAME, 2);
 
     transfer::transfer(m, @0x0);
+    transfer::transfer(m_created, @0x0);
     transfer::transfer(registry, @0x0);
 }
 
@@ -370,22 +368,21 @@ fun test_end_match_win() {
 /* ---------- view ---------- */
 
 #[test]
-fun test_match_state_view() {
+fun test_match_view() {
     let mut ctx = tx_context::dummy();
     let fighter = tx_context::sender(&ctx);
 
     let m = create_test_match(fighter, &mut ctx);
 
-    let (name, f, fighter_state, status, result, pool, viewers) =
-        match_state(&m);
+    let v = match_view(&m);
 
-    assert!(name == string::utf8(b"TestMatch"), 1);
-    assert!(f == fighter, 2);
-    assert!(fighter_state == FIGHTER_ALIVE, 3);
-    assert!(status == CREATED, 4);
-    assert!(option::is_none(&result), 5);
-    assert!(pool == 0, 6);
-    assert!(viewers == 0, 7);
+    assert!(option::is_none(&v.vault_id), 1);
+    assert!(v.name == string::utf8(b"TestMatch"), 2);
+    assert!(v.fighter == fighter, 3);
+    assert!(v.status == CREATED, 4);
+    assert!(option::is_none(&v.result), 5);
+    assert!(v.total_pool == 0, 6);
+    assert!(v.total_bet_viewers == 0, 7);
 
     transfer::public_share_object(m);
 }
