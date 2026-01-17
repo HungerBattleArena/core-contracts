@@ -3,7 +3,7 @@
 
 [move]
 version = 3
-manifest_digest = "27345F42383BE1064C7AF7AE2C2A9AA55DA2CF62C09FF7A9E885C568A6E07A25"
+manifest_digest = "3F8867484F05D352185C3B1335A4B75EB223FBB18C226BD91895336451CA16BC"
 deps_digest = "3C4103934B1E040BB6B23F1D610B4EF9F2F1166A50A104EADCF77467C004C600"
 dependencies = [
   { id = "MoveStdlib", name = "MoveStdlib" },
@@ -44,3 +44,11 @@ source = { root = true }
 use_environment = "testnet"
 manifest_digest = "9D9F107D610BC0EB0837096322C0D4C4F7E0621D4A754C9890CC7177121D8519"
 deps = { MoveStdlib = "MoveStdlib", One = "One" }
+
+[env]
+
+[env.testnet]
+chain-id = "1bd5c965"
+original-published-id = "0x91e8dc918db503866c07122b62079ddba4195ad8f4d4c7a1f352e793d88e3708"
+latest-published-id = "0x91e8dc918db503866c07122b62079ddba4195ad8f4d4c7a1f352e793d88e3708"
+published-version = "1"

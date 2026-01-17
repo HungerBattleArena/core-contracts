@@ -10,7 +10,7 @@ One = { git = "https://github.com/one-chain-labs/onechain.git", subdir = "crates
 MoveStdlib = { git = "https://github.com/one-chain-labs/onechain.git", subdir = "crates/sui-framework/packages/move-stdlib", rev = "main" }
 
 [addresses]
-hunger_battle_arena = "0x9"
+hunger_battle_arena = "0x0"
 
 # Named addresses will be accessible in Move as `@name`. They're also exported:
 # for example, `std = "0x1"` is exported by the Standard Library.
@@ -25,4 +25,3 @@ hunger_battle_arena = "0x9"
 # The dev-addresses section allows overwriting named addresses for the `--test`
 # and `--dev` modes.
 # alice = "0xB0B"
-
