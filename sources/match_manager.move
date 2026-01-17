@@ -2,10 +2,8 @@
 module hunger_battle_arena::match_manager;
 
 use one::event;
-use one::object::{UID, ID};
 use one::table::{Self, Table};
 use std::string::{Self, String};
-use std::vector;
 
 /* ===================== CONSTANTS ===================== */
 
@@ -25,18 +23,18 @@ const E_NAME_TOO_LONG: u64 = 5;
 /* ===================== EVENTS ===================== */
 
 public struct MatchCreated has copy, drop {
-    match_id: ID,
+    match_id: object::ID,
     fighter: address,
     name: String,
 }
 
 public struct MatchStarted has copy, drop {
-    match_id: ID,
+    match_id: object::ID,
     fighter: address,
 }
 
 public struct MatchEnded has copy, drop {
-    match_id: ID,
+    match_id: object::ID,
     fighter: address,
     is_win: bool,
 }
@@ -44,31 +42,36 @@ public struct MatchEnded has copy, drop {
 /* ===================== CAPS ===================== */
 
 public struct AdminCap has key, store {
-    id: UID,
+    id: object::UID,
 }
 
 /* ===================== VIEW STRUCT ===================== */
 /* dùng cho VIEW + UI */
 
 public struct MatchView has copy, drop, store {
-    match_id: ID,
+    match_id: object::ID,
     name: String,
     fighter: address,
     status: u8,
     total_pool: u64,
+    total_bet_viewers: u64,
+    win_bets_total: u64,
+    lose_bets_total: u64,
+    win_bettors_count: u64,
+    lose_bettors_count: u64,
 }
 
 /* ===================== REGISTRY ===================== */
 
 public struct Registry has key, store {
-    id: UID,
-    created_matches: vector<MatchView>,
+    id: object::UID,
+    match_ids: vector<object::ID>,
 }
 
 /* ===================== MATCH (OBJECT) ===================== */
 
 public struct Match has key, store {
-    id: UID,
+    id: object::UID,
     name: String,
     fighter: address,
     fighter_state: u8,
@@ -92,7 +95,7 @@ fun init(ctx: &mut TxContext) {
 
     let registry = Registry {
         id: object::new(ctx),
-        created_matches: vector::empty<MatchView>(),
+        match_ids: vector::empty<object::ID>(),
     };
 
     transfer::public_share_object(registry);
@@ -127,16 +130,7 @@ public fun create_match(
 
     let match_id = object::id(&m);
 
-    vector::push_back(
-        &mut registry.created_matches,
-        MatchView {
-            match_id,
-            name: m.name,
-            fighter,
-            status: CREATED,
-            total_pool: 0,
-        },
-    );
+    vector::push_back(&mut registry.match_ids, match_id);
 
     event::emit(MatchCreated {
         match_id,
@@ -147,34 +141,14 @@ public fun create_match(
     transfer::public_share_object(m);
 }
 
-public fun start_match(
-    registry: &mut Registry,
-    m: &mut Match,
-    ctx: &mut TxContext,
-) {
+public fun start_match(m: &mut Match, ctx: &mut TxContext) {
     assert!(m.status == CREATED, E_INVALID_STATE);
     assert!(tx_context::sender(ctx) == m.fighter, E_NOT_FIGHTER);
 
     m.status = IN_GAME;
 
-    let id = object::id(m);
-    let (found, i) = vector::index_of(
-        &registry.created_matches,
-        &MatchView {
-            match_id: id,
-            name: m.name,
-            fighter: m.fighter,
-            status: CREATED,
-            total_pool: m.total_pool,
-        },
-    );
-    // assert!(found, E_INVALID_STATE);
-
-    let view = vector::borrow_mut(&mut registry.created_matches, i);
-    view.status = IN_GAME;
-
     event::emit(MatchStarted {
-        match_id: id,
+        match_id: object::id(m),
         fighter: m.fighter,
     });
 }
@@ -200,8 +174,23 @@ public fun end_match(
 
 /* ===================== VIEWS ===================== */
 
-public fun get_created_matches(registry: &Registry): vector<MatchView> {
-    registry.created_matches
+public fun get_match_ids(registry: &Registry): vector<object::ID> {
+    registry.match_ids
+}
+
+public fun match_view(m: &Match): MatchView {
+    MatchView {
+        match_id: object::id(m),
+        name: m.name,
+        fighter: m.fighter,
+        status: m.status,
+        total_pool: m.total_pool,
+        total_bet_viewers: m.total_bet_viewers,
+        win_bets_total: m.win_bets_total,
+        lose_bets_total: m.lose_bets_total,
+        win_bettors_count: table::length(&m.win_bets),
+        lose_bettors_count: table::length(&m.lose_bets),
+    }
 }
 
 public fun match_state(
@@ -218,21 +207,76 @@ public fun match_state(
     )
 }
 
+public(package) fun is_created(m: &Match): bool {
+    m.status == CREATED
+}
+
+public(package) fun is_ended(m: &Match): bool {
+    m.status == ENDED && option::is_some(&m.result)
+}
+
+public(package) fun fighter(m: &Match): address {
+    m.fighter
+}
+
+public(package) fun result_value(m: &Match): bool {
+    *option::borrow(&m.result)
+}
+
+public(package) fun has_win_bet(m: &Match, bettor: address): bool {
+    table::contains(&m.win_bets, bettor)
+}
+
+public(package) fun has_lose_bet(m: &Match, bettor: address): bool {
+    table::contains(&m.lose_bets, bettor)
+}
+
+public(package) fun win_bet_amount(m: &Match, bettor: address): u64 {
+    *table::borrow(&m.win_bets, bettor)
+}
+
+public(package) fun lose_bet_amount(m: &Match, bettor: address): u64 {
+    *table::borrow(&m.lose_bets, bettor)
+}
+
+public(package) fun win_bets_total(m: &Match): u64 {
+    m.win_bets_total
+}
+
+public(package) fun lose_bets_total(m: &Match): u64 {
+    m.lose_bets_total
+}
+
+public(package) fun total_pool(m: &Match): u64 {
+    m.total_pool
+}
+
+public(package) fun add_win_bet(m: &mut Match, bettor: address, amount: u64) {
+    table::add(&mut m.win_bets, bettor, amount);
+    m.win_bets_total = m.win_bets_total + amount;
+    m.total_pool = m.total_pool + amount;
+    m.total_bet_viewers = m.total_bet_viewers + 1;
+}
+
+public(package) fun add_lose_bet(m: &mut Match, bettor: address, amount: u64) {
+    table::add(&mut m.lose_bets, bettor, amount);
+    m.lose_bets_total = m.lose_bets_total + amount;
+    m.total_pool = m.total_pool + amount;
+    m.total_bet_viewers = m.total_bet_viewers + 1;
+}
+
 /* ===================== TESTS ===================== */
 
 #[test_only]
-use one::object;
-
-#[test_only]
-fun create_test_registry(ctx: &mut TxContext): Registry {
+public(package) fun create_test_registry(ctx: &mut TxContext): Registry {
     Registry {
         id: object::new(ctx),
-        created_matches: vector::empty<MatchView>(),
+        match_ids: vector::empty<object::ID>(),
     }
 }
 
 #[test_only]
-fun create_test_match(fighter: address, ctx: &mut TxContext): Match {
+public(package) fun create_test_match(fighter: address, ctx: &mut TxContext): Match {
     Match {
         id: object::new(ctx),
         name: string::utf8(b"TestMatch"),
@@ -250,8 +294,19 @@ fun create_test_match(fighter: address, ctx: &mut TxContext): Match {
 }
 
 #[test_only]
-fun create_test_admin(ctx: &mut TxContext): AdminCap {
+public(package) fun create_test_admin(ctx: &mut TxContext): AdminCap {
     AdminCap { id: object::new(ctx) }
+}
+
+#[test_only]
+public(package) fun destroy_test_admin(admin: AdminCap) {
+    let AdminCap { id } = admin;
+    object::delete(id);
+}
+
+#[test_only]
+public(package) fun set_status_in_game(m: &mut Match) {
+    m.status = IN_GAME;
 }
 
 /* ---------- create_match ---------- */
@@ -263,11 +318,8 @@ fun test_create_match_success() {
 
     create_match(&mut registry, b"MyMatch", &mut ctx);
 
-    let views = get_created_matches(&registry);
-    assert!(vector::length(&views) == 1, 1);
-
-    let v = vector::borrow(&views, 0);
-    assert!(v.status == CREATED, 2);
+    let ids = get_match_ids(&registry);
+    assert!(vector::length(&ids) == 1, 1);
     transfer::transfer(registry, @0x0);
 }
 
@@ -284,12 +336,11 @@ fun test_start_match_success() {
     create_match(&mut registry, b"TestMatch", &mut ctx);
 
     let mut m = create_test_match(fighter, &mut ctx);
-    start_match(&mut registry, &mut m, &mut ctx);
+    start_match(&mut m, &mut ctx);
 
     assert!(m.status == IN_GAME, 1);
 
-    let views = get_created_matches(&registry);
-    let v = vector::borrow(&views, 0);
+    let v = match_view(&m);
     assert!(v.status == IN_GAME, 2);
 
     transfer::transfer(m, @0x0);
