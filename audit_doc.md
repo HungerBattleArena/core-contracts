@@ -40,12 +40,15 @@ Event chính
 - `MatchCreated { match_id, fighter, name }`
 - `MatchStarted { match_id, fighter }`
 - `MatchEnded { match_id, fighter, is_win }`
+- `MatchCancelled { match_id, fighter }`
 
 Hàm public
 - `start_match(match: &mut Match, ctx)`
   - Chỉ fighter được gọi; `CREATED -> IN_GAME`.
 - `end_match(admin_cap: &AdminCap, match: &mut Match, is_win: bool)`
   - Chỉ admin được gọi; `IN_GAME -> ENDED`, set `result`.
+- `cancel_match(admin_cap: &AdminCap, match: &mut Match)`
+  - Chỉ admin được gọi; dùng khi `CREATED` hoặc `IN_GAME`, set `CANCELLED`.
 - View:
   - `get_match_ids(registry: &Registry) -> vector<ID>`
     - Trả về danh sách match ID.
@@ -64,7 +67,7 @@ Kiểm soát truy cập
 - `end_match`: cần `AdminCap`.
 
 Bất biến trạng thái
-- `status`: chỉ đi theo thứ tự `CREATED -> IN_GAME -> ENDED`.
+- `status`: `CREATED -> IN_GAME -> ENDED` hoặc `CREATED/IN_GAME -> CANCELLED`.
 - `result`: `None` trước end, chỉ được set một lần khi end match.
 - `vault_id`: chỉ set một lần khi tạo bet vault.
 
@@ -94,6 +97,8 @@ Hàm public
   - Chỉ sau end và chỉ bên thắng.
 - `claim_fighter_reward(vault, match, ctx)`
   - Chỉ sau end và chỉ khi fighter win.
+- `refund_bet(vault, match, ctx)`
+  - Chỉ khi match `CANCELLED`, viewer tự gọi để hoàn tiền bet.
 - View:
   - `user_bet_view(match, viewer)`
     - Trả về bet của viewer trong match (side + amount). Nếu viewer chưa bet thì trả None.
@@ -112,6 +117,7 @@ Kiểm soát truy cập
 - `create_bet_vault` là `public(package)` chỉ fighter gọi; dùng nội bộ.
 - `create_match_with_bet_vault` là entry public chính.
 - Claim có kiểm tra bên thắng và chống claim 2 lần.
+- Refund chỉ cho phép khi match bị huỷ (`CANCELLED`) và mỗi viewer chỉ refund một lần.
 
 Công thức thưởng
 - Fighter win:
