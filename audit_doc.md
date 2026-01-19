@@ -1,4 +1,11 @@
 # Audit doc
+## Mô tả dự án
+Hunger Battle Arena (HBA) là game 2D top-down survival arena. Gameplay chạy off-chain,
+on-chain (OneChain Move) giữ vai trò single source of truth cho vòng đời match,
+betting OCT, và settlement phần thưởng. Fighter tạo phòng và bắt đầu trận, viewer
+đặt cược WIN/LOSE bằng OCT. Khi trận kết thúc, admin gửi kết quả on-chain để
+chốt thưởng cho fighter và viewer thắng.
+
 ## Phạm vi
 - Modules: `hunger_battle_arena::match_manager`, `hunger_battle_arena::bet_engine`
 - Mạng: OneChain Move 
