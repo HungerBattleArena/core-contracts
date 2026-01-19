@@ -32,6 +32,44 @@ Dùng `devInspectTransactionBlock` hoặc helper view của SDK.
 - `is_fighter_claimed(vault) -> bool`
 - `fighter_reward_amount(total_pool) -> u64` (10% tổng pool)
 
+Schema BCS cho các hàm view
+
+MatchView
+```ts
+import { bcs } from "@mysten/sui/bcs";
+
+const MatchView = bcs.struct("MatchView", {
+  match_id: bcs.Address,
+  vault_id: bcs.option(bcs.Address),
+  name: bcs.string(),
+  fighter: bcs.Address,
+  status: bcs.u8(),
+  result: bcs.option(bcs.bool()),
+  total_pool: bcs.u64(),
+  total_bet_viewers: bcs.u64(),
+  win_bets_total: bcs.u64(),
+  lose_bets_total: bcs.u64(),
+  win_bettors_count: bcs.u64(),
+  lose_bettors_count: bcs.u64(),
+});
+```
+
+UserBetView
+```ts
+const UserBetView = bcs.struct("UserBetView", {
+  side: bcs.u8(),
+  amount: bcs.u64(),
+});
+```
+
+- `get_match_ids` -> `bcs.vector(bcs.Address)`
+- `match_view` -> `MatchView`
+- `user_bet_view` -> `bcs.option(UserBetView)`
+- `preview_reward` -> `bcs.u64()`
+- `is_claimed` -> `bcs.bool()`
+- `is_fighter_claimed` -> `bcs.bool()`
+- `fighter_reward_amount` -> `bcs.u64()`
+
 Luồng fighter
 1) Tạo phòng + mở bet (1 giao dịch, 1 ký)
 - Gọi `bet_engine::create_match_with_bet_vault(registry, name_bytes, ctx)`
