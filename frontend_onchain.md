@@ -43,7 +43,7 @@ const MatchView = bcs.struct("MatchView", {
   vault_id: bcs.option(bcs.Address),
   name: bcs.string(),
   fighter: bcs.Address,
-  status: bcs.u8(),
+  status: bcs.u8(),                 // 0=CREATED, 1=IN_GAME, 2=ENDED, 3=CANCELLED
   result: bcs.option(bcs.bool()),
   total_pool: bcs.u64(),
   total_bet_viewers: bcs.u64(),
@@ -86,6 +86,11 @@ Luồng fighter
 - `admin_cap` là AdminCap object (fighter/admin).
 - Trạng thái IN_GAME -> ENDED và set result.
 
+4.1) Cancel match (fighter bỏ, admin cancel)
+- Gọi `match_manager::cancel_match(admin_cap, match)`
+- Chỉ dùng khi match đang CREATED hoặc IN_GAME.
+- Trạng thái -> CANCELLED, mở refund cho viewer.
+
 5) Fighter claim (chỉ khi win)
 - Gọi `bet_engine::claim_fighter_reward(vault, match, ctx)`
 - Nhận 10% tổng pool; chỉ khi fighter thắng và chưa claim.
@@ -121,6 +126,11 @@ Luồng viewer
   - Gọi `bet_engine::claim_viewer_reward(vault, match, ctx)`
   - Chỉ claim được nếu viewer nằm ở bên thắng.
 
+4.1) Refund khi match CANCELLED
+- Xem số tiền refund: `user_bet_view(match, viewer)` -> `amount`.
+- Gọi refund: `bet_engine::refund_bet(vault, match, ctx)`
+- Chỉ được khi match CANCELLED.
+
 Cách tìm BetVault theo Match
 - Đọc `match_view(match).vault_id` để lấy object ID của `BetVault`.
 - Mỗi match có 1 `BetVault`, và `vault_id` được set khi mở bet.
@@ -129,12 +139,14 @@ Targets (Move call format)
 Dùng package ID trong `testnet.md`:
 - `0x...::match_manager::start_match`
 - `0x...::match_manager::end_match`
+- `0x...::match_manager::cancel_match`
 - `0x...::match_manager::get_match_ids`
 - `0x...::match_manager::match_view`
 - `0x...::bet_engine::create_match_with_bet_vault`
 - `0x...::bet_engine::place_bet`
 - `0x...::bet_engine::claim_viewer_reward`
 - `0x...::bet_engine::claim_fighter_reward`
+- `0x...::bet_engine::refund_bet`
 - `0x...::bet_engine::user_bet_view`
 - `0x...::bet_engine::preview_reward`
 - `0x...::bet_engine::is_claimed`

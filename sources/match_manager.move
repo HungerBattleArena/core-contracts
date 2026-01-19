@@ -10,6 +10,7 @@ use std::string::{Self, String};
 const CREATED: u8 = 0;
 const IN_GAME: u8 = 1;
 const ENDED: u8 = 2;
+const CANCELLED: u8 = 3;
 
 const E_NOT_FIGHTER: u64 = 0;
 const E_INVALID_STATE: u64 = 2;
@@ -17,6 +18,7 @@ const E_ALREADY_ENDED: u64 = 3;
 const E_NOT_IN_GAME: u64 = 4;
 const E_NAME_TOO_LONG: u64 = 5;
 const E_VAULT_ALREADY_SET: u64 = 6;
+const E_NOT_CANCELABLE: u64 = 7;
 
 /* ===================== EVENTS ===================== */
 
@@ -35,6 +37,11 @@ public struct MatchEnded has copy, drop {
     match_id: object::ID,
     fighter: address,
     is_win: bool,
+}
+
+public struct MatchCancelled has copy, drop {
+    match_id: object::ID,
+    fighter: address,
 }
 
 /* ===================== CAPS ===================== */
@@ -171,6 +178,19 @@ public fun end_match(
     });
 }
 
+public fun cancel_match(_: &AdminCap, m: &mut Match) {
+    assert!(m.status == CREATED || m.status == IN_GAME, E_NOT_CANCELABLE);
+    assert!(option::is_none(&m.result), E_ALREADY_ENDED);
+
+    m.status = CANCELLED;
+    m.result = option::none();
+
+    event::emit(MatchCancelled {
+        match_id: object::id(m),
+        fighter: m.fighter,
+    });
+}
+
 /* ===================== VIEWS ===================== */
 
 public fun get_match_ids(registry: &Registry): vector<object::ID> {
@@ -204,6 +224,10 @@ public(package) fun is_created(m: &Match): bool {
 
 public(package) fun is_ended(m: &Match): bool {
     m.status == ENDED && option::is_some(&m.result)
+}
+
+public(package) fun is_cancelled(m: &Match): bool {
+    m.status == CANCELLED
 }
 
 public(package) fun fighter(m: &Match): address {
@@ -360,6 +384,39 @@ fun test_end_match_win() {
 
     assert!(m.status == ENDED, 1);
     assert!(option::contains(&m.result, &true), 2);
+
+    transfer::transfer(m, @0x0);
+    transfer::transfer(admin, @0x0);
+}
+
+#[test]
+fun test_cancel_match_created() {
+    let mut ctx = tx_context::dummy();
+    let fighter = tx_context::sender(&ctx);
+
+    let admin = create_test_admin(&mut ctx);
+    let mut m = create_test_match(fighter, &mut ctx);
+    cancel_match(&admin, &mut m);
+
+    assert!(m.status == CANCELLED, 1);
+    assert!(option::is_none(&m.result), 2);
+
+    transfer::transfer(m, @0x0);
+    transfer::transfer(admin, @0x0);
+}
+
+#[test]
+fun test_cancel_match_in_game() {
+    let mut ctx = tx_context::dummy();
+    let fighter = tx_context::sender(&ctx);
+
+    let admin = create_test_admin(&mut ctx);
+    let mut m = create_test_match(fighter, &mut ctx);
+    m.status = IN_GAME;
+    cancel_match(&admin, &mut m);
+
+    assert!(m.status == CANCELLED, 1);
+    assert!(option::is_none(&m.result), 2);
 
     transfer::transfer(m, @0x0);
     transfer::transfer(admin, @0x0);
