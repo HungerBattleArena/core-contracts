@@ -2,9 +2,18 @@
 ## Mô tả dự án
 Hunger Battle Arena (HBA) là game 2D top-down survival arena. Gameplay chạy off-chain,
 on-chain (OneChain Move) giữ vai trò single source of truth cho vòng đời match,
-betting OCT, và settlement phần thưởng. Fighter tạo phòng và bắt đầu trận, viewer
-đặt cược WIN/LOSE bằng OCT. Khi trận kết thúc, admin gửi kết quả on-chain để
-chốt thưởng cho fighter và viewer thắng.
+betting OCT, và settlement phần thưởng. Luồng gameplay MVP:
+- Fighter mở phòng (Create Room).
+- Viewer vào phòng, lock OCT để bet, chọn side WIN/LOSE và nhập số tiền bet.
+- Khi đủ người, fighter bấm Start -> khóa bet và bắt đầu trận.
+- Gameplay (3 phút):
+  - Vòng bo thu hẹp theo thời gian.
+  - Fighter chiến đấu với quái spawn ngẫu nhiên.
+  - Viewer dùng item buff/debuff để tác động lên fighter, hướng kết quả về side đã bet
+    (mỗi item có cooldown).
+- Kết thúc trận và thưởng:
+  - Fighter sống sót (WIN): fighter + toàn bộ bet side WIN nhận thưởng.
+  - Fighter chết (LOSE): toàn bộ bet side LOSE nhận thưởng.
 
 ## Phạm vi
 - Modules: `hunger_battle_arena::match_manager`, `hunger_battle_arena::bet_engine`
