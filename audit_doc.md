@@ -1,5 +1,4 @@
-Ghi chú kiểm toán - Hunger Battle Arena (OneChain Move)
-
+# Audit doc
 ## Phạm vi
 - Modules: `hunger_battle_arena::match_manager`, `hunger_battle_arena::bet_engine`
 - Mạng: OneChain Move 
