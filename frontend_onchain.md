@@ -1,38 +1,38 @@
-Hướng dẫn tích hợp on-chain cho Frontend (Testnet)
+Frontend on-chain integration guide (Testnet)
 
-Tài liệu này mô tả cách FE đọc dữ liệu và gửi giao dịch tới các module
-on-chain đã deploy trên testnet. Các ID nằm trong `testnet.md`.
+This document describes how the frontend reads data and sends transactions to
+on-chain modules deployed on testnet. IDs are listed in `testnet.md`.
 
-Cấu hình testnet
+Testnet configuration
 - RPC: https://rpc-testnet.onelabs.cc:443
-- PackageID: xem `testnet.md`
-- Registry (Shared): xem `testnet.md`
-- AdminCap (ví fighter/admin giữ): xem `testnet.md`
+- PackageID: see `testnet.md`
+- Registry (Shared): see `testnet.md`
+- AdminCap (held by admin wallet): see `testnet.md`
 
 Modules
-- `match_manager`: vòng đời phòng/match + trạng thái match.
-- `bet_engine`: đặt cược + chia thưởng + vault.
+- `match_manager`: match lifecycle and state.
+- `bet_engine`: betting, rewards distribution, and vault.
 
-Các object shared quan trọng
-- `Registry`: lưu `match_ids` để list.
-- `Match`: một phòng/match (shared).
-- `BetVault`: pool OCT + trạng thái claim (shared).
+Key shared objects
+- `Registry`: stores `match_ids` for listing.
+- `Match`: a match/room (shared).
+- `BetVault`: OCT pool + claim state (shared).
 
-View (hàm đọc dữ liệu)
-Dùng `devInspectTransactionBlock` hoặc helper view của SDK.
+View (read-only functions)
+Use `devInspectTransactionBlock` or SDK view helpers.
 
 `match_manager`:
 - `get_match_ids(registry) -> vector<ID>`
-- `match_view(match) -> MatchView` (trạng thái + pool + betters + `vault_id`)
+- `match_view(match) -> MatchView` (status + pool + betters + `vault_id`)
 
 `bet_engine`:
 - `user_bet_view(match, viewer) -> Option<UserBetView>`
 - `preview_reward(match, viewer) -> u64`
 - `is_claimed(vault, viewer) -> bool`
 - `is_fighter_claimed(vault) -> bool`
-- `fighter_reward_amount(total_pool) -> u64` (10% tổng pool)
+- `fighter_reward_amount(total_pool) -> u64` (10% of total pool)
 
-Schema BCS cho các hàm view
+BCS schema for view functions
 
 MatchView
 ```ts
@@ -70,79 +70,79 @@ const UserBetView = bcs.struct("UserBetView", {
 - `is_fighter_claimed` -> `bcs.bool()`
 - `fighter_reward_amount` -> `bcs.u64()`
 
-Luồng fighter
-1) Tạo phòng + mở bet (1 giao dịch, 1 ký)
-- Gọi `bet_engine::create_match_with_bet_vault(registry, name_bytes, ctx)`
-- `registry` là object Registry shared từ `testnet.md`
-- `name_bytes` <= 20 bytes UTF-8
-- Kết quả: tạo `Match` shared + `BetVault` shared; lấy `match_id` từ event `MatchCreated`.
+Fighter flow
+1) Create room + open bets (1 tx, 1 signature)
+- Call `bet_engine::create_match_with_bet_vault(registry, name_bytes, ctx)`
+- `registry` is the shared Registry object from `testnet.md`
+- `name_bytes` <= 20 UTF-8 bytes
+- Result: creates shared `Match` + `BetVault`; get `match_id` from `MatchCreated` event.
 
 3) Start match
-- Gọi `match_manager::start_match(match, ctx)`
-- Yêu cầu đúng fighter; trạng thái CREATED -> IN_GAME.
+- Call `match_manager::start_match(match, ctx)`
+- Requires fighter; status `CREATED -> IN_GAME`.
 
 4) End match
-- Gọi `match_manager::end_match(admin_cap, match, is_win)`
-- `admin_cap` là AdminCap object (fighter/admin).
-- Trạng thái IN_GAME -> ENDED và set result.
-- Dùng backend API (server ký admin), gọi:
+- Call `match_manager::end_match(admin_cap, match, is_win)`
+- `admin_cap` is the AdminCap object (admin).
+- Status `IN_GAME -> ENDED` and set result.
+- If using backend API (server signs as admin), call:
   - `POST https://hunger-api.a-star.group/api/hunger-game/match/end`
-  - Body JSON: `{ "matchId": "<MATCH_ID>", "isWin": true }`
+  - JSON body: `{ "matchId": "<MATCH_ID>", "isWin": true }`
 
-4.1) Cancel match (fighter bỏ, admin cancel)
-- Gọi `match_manager::cancel_match(admin_cap, match)`
-- Chỉ dùng khi match đang CREATED hoặc IN_GAME.
-- Trạng thái -> CANCELLED, mở refund cho viewer.
-- Dùng backend API (server ký admin), gọi:
+4.1) Cancel match (fighter quits, admin cancels)
+- Call `match_manager::cancel_match(admin_cap, match)`
+- Only when match is `CREATED` or `IN_GAME`.
+- Status -> `CANCELLED`, enable refund for viewers.
+- If using backend API (server signs as admin), call:
   - `POST https://hunger-api.a-star.group/api/hunger-game/match/cancel`
-  - Body JSON: `{ "matchId": "<MATCH_ID>" }`
+  - JSON body: `{ "matchId": "<MATCH_ID>" }`
 
-5) Fighter claim (chỉ khi win)
-- Gọi `bet_engine::claim_fighter_reward(vault, match, ctx)`
-- Nhận 10% tổng pool; chỉ khi fighter thắng và chưa claim.
+5) Fighter claim (only when win)
+- Call `bet_engine::claim_fighter_reward(vault, match, ctx)`
+- Receive 10% of total pool; only if fighter wins and not claimed.
 
-Dữ liệu cho UI fighter
-- Trạng thái phòng: `match_view(match).status`
+Data for fighter UI
+- Room status: `match_view(match).status`
 - Pool + betters: `match_view(match)`
-- Màn kết quả: `match_view(match).result`
-- Reward (nếu win): `fighter_reward_amount(total_pool)`
+- Result screen: `match_view(match).result`
+- Reward (if win): `fighter_reward_amount(total_pool)`
 
-Luồng viewer
-1) Danh sách phòng (betting open)
-- Gọi `match_manager::get_match_ids(registry)`
-- Với mỗi `match_id`, fetch object `Match` và gọi:
-  - `match_view(match)` để lấy tổng số liệu và lọc `status == CREATED` (betting open)
+Viewer flow
+1) Room list (betting open)
+- Call `match_manager::get_match_ids(registry)`
+- For each `match_id`, fetch the `Match` object and call:
+  - `match_view(match)` to get totals and filter `status == CREATED` (betting open)
 
-2) Chi tiết phòng / lock bet
-- Đọc `match_view(match)` để lấy pool + count.
-- Đọc `user_bet_view(match, viewer)` để hiện bet đã đặt (nếu có).
-- Đặt bet:
-  - Gọi `bet_engine::place_bet(vault, match, side, Coin<OCT>, ctx)`
-  - `side`: `SIDE_WIN` hoặc `SIDE_LOSE`
-  - Chỉ được khi status == CREATED.
-  - Mỗi address chỉ bet 1 lần/match; fighter không được bet.
+2) Room detail / lock bet
+- Read `match_view(match)` for pool + counts.
+- Read `user_bet_view(match, viewer)` to show existing bet (if any).
+- Place bet:
+  - Call `bet_engine::place_bet(vault, match, side, Coin<OCT>, ctx)`
+  - `side`: `SIDE_WIN` or `SIDE_LOSE`
+  - Only when status == CREATED.
+  - Each address can bet only once per match; fighter cannot bet.
 
-3) Màn chờ
-- Poll `match_view(match).status` cho tới IN_GAME rồi ENDED.
+3) Waiting screen
+- Poll `match_view(match).status` until IN_GAME then ENDED.
 
-4) Kết quả / claim
-- Dùng `preview_reward(match, viewer)` để hiện thưởng dự kiến sau khi end.
-- Dùng `is_claimed(vault, viewer)` để bật/tắt nút claim.
+4) Result / claim
+- Use `preview_reward(match, viewer)` to show estimated reward after end.
+- Use `is_claimed(vault, viewer)` to enable/disable claim button.
 - Claim:
-  - Gọi `bet_engine::claim_viewer_reward(vault, match, ctx)`
-  - Chỉ claim được nếu viewer nằm ở bên thắng.
+  - Call `bet_engine::claim_viewer_reward(vault, match, ctx)`
+  - Can only claim if viewer is on the winning side.
 
-4.1) Refund khi match CANCELLED
-- Xem số tiền refund: `user_bet_view(match, viewer)` -> `amount`.
-- Gọi refund: `bet_engine::refund_bet(vault, match, ctx)`
-- Chỉ được khi match CANCELLED.
+4.1) Refund when match is CANCELLED
+- Refund amount: `user_bet_view(match, viewer)` -> `amount`.
+- Call refund: `bet_engine::refund_bet(vault, match, ctx)`
+- Only when match is CANCELLED.
 
-Cách tìm BetVault theo Match
-- Đọc `match_view(match).vault_id` để lấy object ID của `BetVault`.
-- Mỗi match có 1 `BetVault`, và `vault_id` được set khi mở bet.
+How to find BetVault by Match
+- Read `match_view(match).vault_id` to get the `BetVault` object ID.
+- Each match has one `BetVault`, and `vault_id` is set when opening bets.
 
 Targets (Move call format)
-Dùng package ID trong `testnet.md`:
+Use package ID from `testnet.md`:
 - `0x...::match_manager::start_match`
 - `0x...::match_manager::end_match`
 - `0x...::match_manager::cancel_match`

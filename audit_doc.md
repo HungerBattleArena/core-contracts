@@ -1,132 +1,133 @@
 # Audit doc
-## Mô tả dự án
-Hunger Battle Arena (HBA) là game 2D top-down survival arena. Gameplay chạy off-chain,
-on-chain (OneChain Move) giữ vai trò single source of truth cho vòng đời match,
-betting OCT, và settlement phần thưởng. Luồng gameplay MVP:
-- Fighter mở phòng (Create Room).
-- Viewer vào phòng, lock OCT để bet, chọn side WIN/LOSE và nhập số tiền bet.
-- Khi đủ người, fighter bấm Start -> khóa bet và bắt đầu trận.
-- Gameplay (3 phút):
-  - Vòng bo thu hẹp theo thời gian.
-  - Fighter chiến đấu với quái spawn ngẫu nhiên.
-  - Viewer dùng item buff/debuff để tác động lên fighter, hướng kết quả về side đã bet
-    (mỗi item có cooldown).
-- Kết thúc trận và thưởng:
-  - Fighter sống sót (WIN): fighter + toàn bộ bet side WIN nhận thưởng.
-  - Fighter chết (LOSE): toàn bộ bet side LOSE nhận thưởng.
+## Project description
+Hunger Battle Arena (HBA) is a 2D top-down survival arena game. Gameplay runs off-chain;
+on-chain (OneChain Move) is the single source of truth for the match lifecycle,
+OCT betting, and reward settlement. MVP gameplay flow:
+- Fighter creates a room (Create Room).
+- Viewer joins the room, locks OCT to bet, chooses WIN/LOSE, and inputs the bet amount.
+- When enough players are ready, the fighter presses Start to lock bets and start the match.
+- Gameplay (3 minutes):
+  - The circle shrinks over time.
+  - Fighter battles randomly spawned monsters.
+  - Viewers use buff/debuff items to influence the fighter toward their bet side
+    (each item has a cooldown).
+- Match ends and rewards are settled:
+  - Fighter survives (WIN): fighter and all WIN-side bets receive rewards.
+  - Fighter dies (LOSE): all LOSE-side bets receive rewards.
 
-## Phạm vi
+## Scope
 - Modules: `hunger_battle_arena::match_manager`, `hunger_battle_arena::bet_engine`
-- Mạng: OneChain Move 
+- Network: OneChain Move
 
-## Tóm tắt
-- `match_manager` quản lý vòng đời match và dữ liệu view.
-- `bet_engine` quản lý pool bet, claim, và chia thưởng cho viewer/fighter.
-- Trạng thái quan trọng đều on-chain; gameplay off-chain.
+## Summary
+- `match_manager` manages the match lifecycle and view data.
+- `bet_engine` manages the betting pool, claims, and rewards for viewers/fighter.
+- All critical state is on-chain; gameplay is off-chain.
 
 ## Module: match_manager
 
-Mục đích
-- Tạo và theo dõi match (room).
-- Start và end match.
-- Cung cấp view read-only cho UI.
+Purpose
+- Create and track matches (rooms).
+- Start and end matches.
+- Provide read-only views for UI.
 
-Object chính
-- `Registry` (shared): lưu `match_ids`.
-- `Match` (shared): trạng thái match và tổng bet.
-- `AdminCap` (owned): bắt buộc khi end match.
+Key objects
+- `Registry` (shared): stores `match_ids`.
+- `Match` (shared): match state and total bets.
+- `AdminCap` (owned): required to end a match.
 
-Event chính
+Key events
 - `MatchCreated { match_id, fighter, name }`
 - `MatchStarted { match_id, fighter }`
 - `MatchEnded { match_id, fighter, is_win }`
 - `MatchCancelled { match_id, fighter }`
 
-Hàm public
+Public functions
 - `start_match(match: &mut Match, ctx)`
-  - Chỉ fighter được gọi; `CREATED -> IN_GAME`.
+  - Only fighter can call; `CREATED -> IN_GAME`.
 - `end_match(admin_cap: &AdminCap, match: &mut Match, is_win: bool)`
-  - Chỉ admin được gọi; `IN_GAME -> ENDED`, set `result`.
+  - Only admin can call; `IN_GAME -> ENDED`, set `result`.
 - `cancel_match(admin_cap: &AdminCap, match: &mut Match)`
-  - Chỉ admin được gọi; dùng khi `CREATED` hoặc `IN_GAME`, set `CANCELLED`.
-- View:
+  - Only admin can call; use when `CREATED` or `IN_GAME`, set `CANCELLED`.
+- Views:
   - `get_match_ids(registry: &Registry) -> vector<ID>`
-    - Trả về danh sách match ID.
+    - Returns the list of match IDs.
   - `match_view(match: &Match) -> MatchView`
-    - Trả về dữ liệu UI (status/result/pool totals + counts).
+    - Returns UI data (status/result/pool totals + counts).
 
-Hàm nội bộ/package
+Internal/package functions
 - `create_match_internal(...) -> Match`
-  - Được gọi bởi `bet_engine::create_match_with_bet_vault`.
+  - Called by `bet_engine::create_match_with_bet_vault`.
 - `set_vault_id(match, vault_id)`
-  - Set `match.vault_id` 1 lần (có bảo vệ).
-- Các helper getter dùng cho bet bookkeeping.
+  - Set `match.vault_id` once (guarded).
+- Helper getters used for bet bookkeeping.
 
-Kiểm soát truy cập
-- `start_match`: chỉ fighter.
-- `end_match`: cần `AdminCap`.
+Access control
+- `start_match`: fighter only.
+- `end_match`: requires `AdminCap`.
 
-Bất biến trạng thái
-- `status`: `CREATED -> IN_GAME -> ENDED` hoặc `CREATED/IN_GAME -> CANCELLED`.
-- `result`: `None` trước end, chỉ được set một lần khi end match.
-- `vault_id`: chỉ set một lần khi tạo bet vault.
+State invariants
+- `status`: `CREATED -> IN_GAME -> ENDED` or `CREATED/IN_GAME -> CANCELLED`.
+- `result`: `None` before end, can only be set once when ending a match.
+- `vault_id`: can only be set once when creating the bet vault.
 
 ## Module: bet_engine
 
-Mục đích
-- Tạo bet vault và quản lý OCT pool.
-- Cho đặt bet WIN/LOSE.
-- Chia thưởng cho viewer và fighter.
+Purpose
+- Create bet vaults and manage the OCT pool.
+- Allow WIN/LOSE betting.
+- Distribute rewards to viewers and fighter.
 
-Object chính
-- `BetVault` (shared): giữ `pool`, bảng claim, `match_id`.
+Key objects
+- `BetVault` (shared): holds `pool`, claim table, `match_id`.
 
-Event chính
+Key events
 - `BetVaultCreated { match_id, fighter }`
 - `BetPlaced { match_id, bettor, side, amount }`
 - `ViewerRewardClaimed { match_id, viewer, amount }`
 - `FighterRewardClaimed { match_id, fighter, amount }`
 
-Hàm public
+Public functions
 - `create_match_with_bet_vault(registry, name_bytes, ctx)`
-  - Tạo `Match` + `BetVault` trong 1 tx, set `vault_id`, share cả hai.
+  - Create `Match` + `BetVault` in one tx, set `vault_id`, share both.
 - `place_bet(vault, match, side, bet, ctx)`
-  - Chỉ khi match `CREATED`.
-  - Chặn fighter bet và double bet.
+  - Only when match is `CREATED`.
+  - Blocks fighter bets and double bets.
 - `claim_viewer_reward(vault, match, ctx)`
-  - Chỉ sau end và chỉ bên thắng.
+  - Only after end and only for the winning side.
 - `claim_fighter_reward(vault, match, ctx)`
-  - Chỉ sau end và chỉ khi fighter win.
+  - Only after end and only if fighter wins.
 - `refund_bet(vault, match, ctx)`
-  - Chỉ khi match `CANCELLED`, viewer tự gọi để hoàn tiền bet.
-- View:
+  - Only when match is `CANCELLED`, viewer calls to refund bet.
+- Views:
   - `user_bet_view(match, viewer)`
-    - Trả về bet của viewer trong match (side + amount). Nếu viewer chưa bet thì trả None.
+    - Returns viewer bet in match (side + amount). If none, returns None.
   - `preview_reward(match, viewer)`
-    - Tính trước số OCT viewer sẽ nhận nếu match đã END và viewer ở phía thắng. Nếu chưa END hoặc viewer thua thì trả 0
+    - Pre-computes viewer reward if match ended and viewer is on winning side.
+      If not ended or viewer loses, returns 0.
   - `is_claimed(vault, viewer)`
-    - Kiểm tra viewer đã claim thưởng trong vault chưa.
+    - Checks if viewer has claimed in the vault.
   - `is_fighter_claimed(vault)`
-    - Kiểm tra fighter đã claim thưởng chưa.
+    - Checks if fighter has claimed.
   - `pool_balance(vault)`
-    - Số OCT còn lại trong BetVault (sau khi một phần đã claim).
+    - Remaining OCT in the BetVault (after some claims).
   - `fighter_reward_amount(total_pool)`
-    - Tính phần thưởng cho fighter (10% tổng pool).
+    - Fighter reward (10% of total pool).
 
-Kiểm soát truy cập
-- `create_bet_vault` là `public(package)` chỉ fighter gọi; dùng nội bộ.
-- `create_match_with_bet_vault` là entry public chính.
-- Claim có kiểm tra bên thắng và chống claim 2 lần.
-- Refund chỉ cho phép khi match bị huỷ (`CANCELLED`) và mỗi viewer chỉ refund một lần.
+Access control
+- `create_bet_vault` is `public(package)` and fighter-only; used internally.
+- `create_match_with_bet_vault` is the main public entry.
+- Claims check the winning side and prevent double claims.
+- Refund only allowed when match is `CANCELLED`, and each viewer can refund once.
 
-Công thức thưởng
+Reward formula
 - Fighter win:
-  - Thưởng fighter = 10% tổng pool.
-  - Thưởng viewer = (bet viewer / tổng win bets) * (total_pool - fighter_reward).
+  - Fighter reward = 10% of total pool.
+  - Viewer reward = (viewer bet / total win bets) * (total_pool - fighter_reward).
 - Fighter lose:
-  - Thưởng viewer = (bet viewer / tổng lose bets) * total_pool.
+  - Viewer reward = (viewer bet / total lose bets) * total_pool.
 
-Kiểm soát an toàn
-- `BetVault` dùng `Table` để chống double claim.
-- Bên thua không được claim; abort `E_NOT_WINNER`.
-- Pool được bảo toàn: tổng payout = total pool (fighter + viewers thắng).
+Safety checks
+- `BetVault` uses `Table` to prevent double claim.
+- Losing side cannot claim; abort `E_NOT_WINNER`.
+- Pool conservation: total payout = total pool (fighter + winning viewers).
