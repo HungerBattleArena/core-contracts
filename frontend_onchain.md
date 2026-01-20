@@ -85,11 +85,17 @@ Luồng fighter
 - Gọi `match_manager::end_match(admin_cap, match, is_win)`
 - `admin_cap` là AdminCap object (fighter/admin).
 - Trạng thái IN_GAME -> ENDED và set result.
+- Dùng backend API (server ký admin), gọi:
+  - `POST https://hunger-api.a-star.group/api/hunger-game/match/end`
+  - Body JSON: `{ "matchId": "<MATCH_ID>", "isWin": true }`
 
 4.1) Cancel match (fighter bỏ, admin cancel)
 - Gọi `match_manager::cancel_match(admin_cap, match)`
 - Chỉ dùng khi match đang CREATED hoặc IN_GAME.
 - Trạng thái -> CANCELLED, mở refund cho viewer.
+- Dùng backend API (server ký admin), gọi:
+  - `POST https://hunger-api.a-star.group/api/hunger-game/match/cancel`
+  - Body JSON: `{ "matchId": "<MATCH_ID>" }`
 
 5) Fighter claim (chỉ khi win)
 - Gọi `bet_engine::claim_fighter_reward(vault, match, ctx)`
