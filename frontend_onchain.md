@@ -8,6 +8,7 @@ Testnet configuration
 - PackageID: see `testnet.md`
 - Registry (Shared): see `testnet.md`
 - AdminCap (held by admin wallet): see `testnet.md`
+- Treasury (Shared, fee receiver): see `testnet.md`
 
 Modules
 - `match_manager`: match lifecycle and state.
@@ -17,6 +18,7 @@ Key shared objects
 - `Registry`: stores `match_ids` for listing.
 - `Match`: a match/room (shared).
 - `BetVault`: OCT pool + claim state (shared).
+- `Treasury`: fee receiver (shared).
 
 View (read-only functions)
 Use `devInspectTransactionBlock` or SDK view helpers.
@@ -27,10 +29,12 @@ Use `devInspectTransactionBlock` or SDK view helpers.
 
 `bet_engine`:
 - `user_bet_view(match, viewer) -> Option<UserBetView>`
-- `preview_reward(match, viewer) -> u64`
+- `preview_reward(match, viewer) -> u64` (net reward after 5% fee)
 - `is_claimed(vault, viewer) -> bool`
 - `is_fighter_claimed(vault) -> bool`
 - `fighter_reward_amount(total_pool) -> u64` (10% of total pool)
+- `fee_bps() -> u64` (500 = 5%)
+- `treasury_admin(treasury) -> address`
 
 BCS schema for view functions
 
@@ -69,6 +73,8 @@ const UserBetView = bcs.struct("UserBetView", {
 - `is_claimed` -> `bcs.bool()`
 - `is_fighter_claimed` -> `bcs.bool()`
 - `fighter_reward_amount` -> `bcs.u64()`
+- `fee_bps` -> `bcs.u64()`
+- `treasury_admin` -> `bcs.Address`
 
 Fighter flow
 1) Create room + open bets (1 tx, 1 signature)
@@ -98,14 +104,15 @@ Fighter flow
   - JSON body: `{ "matchId": "<MATCH_ID>" }`
 
 5) Fighter claim (only when win)
-- Call `bet_engine::claim_fighter_reward(vault, match, ctx)`
-- Receive 10% of total pool; only if fighter wins and not claimed.
+- Call `bet_engine::claim_fighter_reward(treasury, vault, match, ctx)`
+- Receive 10% of total pool, then pay 5% fee from the reward.
 
 Data for fighter UI
 - Room status: `match_view(match).status`
 - Pool + betters: `match_view(match)`
 - Result screen: `match_view(match).result`
 - Reward (if win): `fighter_reward_amount(total_pool)`
+- Reward (net): `preview_reward(match, fighter)` after end
 
 Viewer flow
 1) Room list (betting open)
@@ -126,10 +133,10 @@ Viewer flow
 - Poll `match_view(match).status` until IN_GAME then ENDED.
 
 4) Result / claim
-- Use `preview_reward(match, viewer)` to show estimated reward after end.
+- Use `preview_reward(match, viewer)` to show estimated reward after end (net, fee already applied).
 - Use `is_claimed(vault, viewer)` to enable/disable claim button.
 - Claim:
-  - Call `bet_engine::claim_viewer_reward(vault, match, ctx)`
+  - Call `bet_engine::claim_viewer_reward(treasury, vault, match, ctx)`
   - Can only claim if viewer is on the winning side.
 
 4.1) Refund when match is CANCELLED
@@ -157,3 +164,5 @@ Use package ID from `testnet.md`:
 - `0x...::bet_engine::preview_reward`
 - `0x...::bet_engine::is_claimed`
 - `0x...::bet_engine::is_fighter_claimed`
+- `0x...::bet_engine::fee_bps`
+- `0x...::bet_engine::treasury_admin`

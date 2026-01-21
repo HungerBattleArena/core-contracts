@@ -80,6 +80,7 @@ Purpose
 
 Key objects
 - `BetVault` (shared): holds `pool`, claim table, `match_id`.
+- `Treasury` (shared): fee receiver (admin address).
 
 Key events
 - `BetVaultCreated { match_id, fighter }`
@@ -93,9 +94,9 @@ Public functions
 - `place_bet(vault, match, side, bet, ctx)`
   - Only when match is `CREATED`.
   - Blocks fighter bets and double bets.
-- `claim_viewer_reward(vault, match, ctx)`
+- `claim_viewer_reward(treasury, vault, match, ctx)`
   - Only after end and only for the winning side.
-- `claim_fighter_reward(vault, match, ctx)`
+- `claim_fighter_reward(treasury, vault, match, ctx)`
   - Only after end and only if fighter wins.
 - `refund_bet(vault, match, ctx)`
   - Only when match is `CANCELLED`, viewer calls to refund bet.
@@ -113,6 +114,10 @@ Public functions
     - Remaining OCT in the BetVault (after some claims).
   - `fighter_reward_amount(total_pool)`
     - Fighter reward (10% of total pool).
+  - `fee_bps()`
+    - Fee rate in BPS (500 = 5%).
+  - `treasury_admin(treasury)`
+    - Treasury fee receiver address.
 
 Access control
 - `create_bet_vault` is `public(package)` and fighter-only; used internally.
@@ -126,6 +131,10 @@ Reward formula
   - Viewer reward = (viewer bet / total win bets) * (total_pool - fighter_reward).
 - Fighter lose:
   - Viewer reward = (viewer bet / total lose bets) * total_pool.
+
+Fee
+- Fee = 5% of each winner claim (viewer claim and fighter claim).
+- Fee is transferred to `Treasury.admin`.
 
 Safety checks
 - `BetVault` uses `Table` to prevent double claim.

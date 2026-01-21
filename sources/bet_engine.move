@@ -23,6 +23,9 @@ const E_FIGHTER_CANNOT_BET: u64 = 10;
 const E_MATCH_NOT_CANCELLED: u64 = 11;
 const E_NOT_BETTOR: u64 = 12;
 
+const FEE_BPS: u64 = 500;
+const BPS_DENOM: u64 = 10000;
+
 public struct BetVaultCreated has copy, drop {
     match_id: ID,
     fighter: address,
@@ -59,6 +62,19 @@ public struct BetVault has key, store {
     pool: Coin<OCT>,
     claimed: Table<address, bool>,
     fighter_claimed: bool,
+}
+
+public struct Treasury has key, store {
+    id: UID,
+    admin: address,
+}
+
+fun init(ctx: &mut TxContext) {
+    let treasury = Treasury {
+        id: object::new(ctx),
+        admin: tx_context::sender(ctx),
+    };
+    transfer::public_share_object(treasury);
 }
 
 #[allow(lint(share_owned))]
@@ -133,7 +149,12 @@ public fun place_bet(
 }
 
 #[allow(lint(self_transfer))]
-public fun claim_viewer_reward(vault: &mut BetVault, m: &mut Match, ctx: &mut TxContext) {
+public fun claim_viewer_reward(
+    treasury: &Treasury,
+    vault: &mut BetVault,
+    m: &mut Match,
+    ctx: &mut TxContext,
+) {
     assert!(vault.match_id == object::id(m), E_MATCH_MISMATCH);
     assert!(match_manager::is_ended(m), E_MATCH_NOT_ENDED);
 
@@ -153,22 +174,35 @@ public fun claim_viewer_reward(vault: &mut BetVault, m: &mut Match, ctx: &mut Tx
         (bet_amount * match_manager::total_pool(m)) / match_manager::lose_bets_total(m)
     };
 
+    let fee = fee_amount(reward);
+    let payout_amount = reward - fee;
+
     table::add(&mut vault.claimed, sender, true);
 
-    if (reward > 0) {
-        let payout = coin::split(&mut vault.pool, reward, ctx);
+    if (payout_amount > 0) {
+        let payout = coin::split(&mut vault.pool, payout_amount, ctx);
         transfer::public_transfer(payout, sender);
+    };
+
+    if (fee > 0) {
+        let fee_coin = coin::split(&mut vault.pool, fee, ctx);
+        transfer::public_transfer(fee_coin, treasury.admin);
     };
 
     event::emit(ViewerRewardClaimed {
         match_id: object::id(m),
         viewer: sender,
-        amount: reward,
+        amount: payout_amount,
     });
 }
 
 #[allow(lint(self_transfer))]
-public fun claim_fighter_reward(vault: &mut BetVault, m: &mut Match, ctx: &mut TxContext) {
+public fun claim_fighter_reward(
+    treasury: &Treasury,
+    vault: &mut BetVault,
+    m: &mut Match,
+    ctx: &mut TxContext,
+) {
     assert!(vault.match_id == object::id(m), E_MATCH_MISMATCH);
     assert!(match_manager::is_ended(m), E_MATCH_NOT_ENDED);
 
@@ -180,17 +214,24 @@ public fun claim_fighter_reward(vault: &mut BetVault, m: &mut Match, ctx: &mut T
     assert!(is_win, E_FIGHTER_LOST);
 
     let reward = fighter_reward_amount(match_manager::total_pool(m));
+    let fee = fee_amount(reward);
+    let payout_amount = reward - fee;
     vault.fighter_claimed = true;
 
-    if (reward > 0) {
-        let payout = coin::split(&mut vault.pool, reward, ctx);
+    if (payout_amount > 0) {
+        let payout = coin::split(&mut vault.pool, payout_amount, ctx);
         transfer::public_transfer(payout, sender);
+    };
+
+    if (fee > 0) {
+        let fee_coin = coin::split(&mut vault.pool, fee, ctx);
+        transfer::public_transfer(fee_coin, treasury.admin);
     };
 
     event::emit(FighterRewardClaimed {
         match_id: object::id(m),
         fighter: sender,
-        amount: reward,
+        amount: payout_amount,
     });
 }
 
@@ -222,6 +263,14 @@ public fun fighter_reward_amount(total_pool: u64): u64 {
     total_pool / 10
 }
 
+public fun fee_amount(amount: u64): u64 {
+    (amount * FEE_BPS) / BPS_DENOM
+}
+
+public fun net_amount(amount: u64): u64 {
+    amount - fee_amount(amount)
+}
+
 public fun user_bet_view(m: &Match, viewer: address): option::Option<UserBetView> {
     if (match_manager::has_win_bet(m, viewer)) {
         option::some(UserBetView {
@@ -250,6 +299,14 @@ public fun pool_balance(vault: &BetVault): u64 {
     coin::value(&vault.pool)
 }
 
+public fun treasury_admin(treasury: &Treasury): address {
+    treasury.admin
+}
+
+public fun fee_bps(): u64 {
+    FEE_BPS
+}
+
 public fun preview_reward(m: &Match, viewer: address): u64 {
     if (match_manager::is_cancelled(m)) {
         0
@@ -262,14 +319,17 @@ public fun preview_reward(m: &Match, viewer: address): u64 {
             let bet_amount = match_manager::win_bet_amount(m, viewer);
             let fighter_reward = fighter_reward_amount(match_manager::total_pool(m));
             let viewers_pool = match_manager::total_pool(m) - fighter_reward;
-            (bet_amount * viewers_pool) / match_manager::win_bets_total(m)
+            let reward = (bet_amount * viewers_pool) / match_manager::win_bets_total(m);
+            net_amount(reward)
         }
     } else {
         if (!match_manager::has_lose_bet(m, viewer)) {
             0
         } else {
             let bet_amount = match_manager::lose_bet_amount(m, viewer);
-            (bet_amount * match_manager::total_pool(m)) / match_manager::lose_bets_total(m)
+            let reward =
+                (bet_amount * match_manager::total_pool(m)) / match_manager::lose_bets_total(m);
+            net_amount(reward)
         }
     }
 }
@@ -285,6 +345,14 @@ fun new_test_vault(m: &Match, ctx: &mut TxContext): BetVault {
         pool: coin::zero(ctx),
         claimed: table::new(ctx),
         fighter_claimed: false,
+    }
+}
+
+#[test_only]
+fun new_test_treasury(ctx: &mut TxContext): Treasury {
+    Treasury {
+        id: object::new(ctx),
+        admin: tx_context::sender(ctx),
     }
 }
 
@@ -349,7 +417,7 @@ fun test_preview_reward_win() {
     match_manager::end_match(&admin, &mut m, true);
     match_manager::destroy_test_admin(admin);
 
-    assert!(preview_reward(&m, viewer) == 90, 1);
+    assert!(preview_reward(&m, viewer) == 86, 1);
 
     transfer::public_transfer(m, @0x0);
     transfer::transfer(v, @0x0);
@@ -372,7 +440,7 @@ fun test_preview_reward_lose() {
     match_manager::end_match(&admin, &mut m, false);
     match_manager::destroy_test_admin(admin);
 
-    assert!(preview_reward(&m, viewer) == 80, 1);
+    assert!(preview_reward(&m, viewer) == 76, 1);
 
     transfer::public_transfer(m, @0x0);
     transfer::transfer(v, @0x0);
@@ -420,14 +488,16 @@ fun test_claim_before_end_rejected() {
 
     let mut m = match_manager::create_test_match(fighter, &mut ctx);
     let mut v = new_test_vault(&m, &mut ctx);
+    let treasury = new_test_treasury(&mut ctx);
 
     let bet = coin::mint_for_testing<OCT>(10, &mut ctx);
     place_bet(&mut v, &mut m, SIDE_WIN, bet, &mut ctx);
 
-    claim_viewer_reward(&mut v, &mut m, &mut ctx);
+    claim_viewer_reward(&treasury, &mut v, &mut m, &mut ctx);
 
     transfer::public_transfer(m, @0x0);
     transfer::transfer(v, @0x0);
+    transfer::transfer(treasury, @0x0);
 }
 
 #[test]
@@ -456,6 +526,8 @@ fun test_bet_and_claim_flow() {
     let mut registry = match_manager::create_test_registry(scenario.ctx());
     create_match_with_bet_vault(&mut registry, b"Room", scenario.ctx());
     transfer::public_transfer(registry, @0x0);
+    let treasury = new_test_treasury(scenario.ctx());
+    transfer::public_share_object(treasury);
 
     scenario.next_tx(viewer_win);
     let mut m: Match = scenario.take_shared();
@@ -484,12 +556,14 @@ fun test_bet_and_claim_flow() {
     scenario.next_tx(viewer_win);
     let mut m: Match = scenario.take_shared();
     let mut v: BetVault = scenario.take_shared();
-    assert!(preview_reward(&m, viewer_win) == 135, 1);
-    claim_viewer_reward(&mut v, &mut m, scenario.ctx());
+    let treasury: Treasury = scenario.take_shared();
+    assert!(preview_reward(&m, viewer_win) == 129, 1);
+    claim_viewer_reward(&treasury, &mut v, &mut m, scenario.ctx());
     assert!(coin::value(&v.pool) == 15, 2);
     assert!(table::contains(&v.claimed, viewer_win), 3);
     transfer::public_share_object(m);
     transfer::public_share_object(v);
+    transfer::public_share_object(treasury);
 
     scenario.next_tx(viewer_lose);
     let m: Match = scenario.take_shared();
@@ -501,11 +575,13 @@ fun test_bet_and_claim_flow() {
     scenario.next_tx(fighter);
     let mut m: Match = scenario.take_shared();
     let mut v: BetVault = scenario.take_shared();
-    claim_fighter_reward(&mut v, &mut m, scenario.ctx());
+    let treasury: Treasury = scenario.take_shared();
+    claim_fighter_reward(&treasury, &mut v, &mut m, scenario.ctx());
     assert!(coin::value(&v.pool) == 0, 5);
     assert!(v.fighter_claimed, 6);
     transfer::public_share_object(m);
     transfer::public_share_object(v);
+    transfer::public_share_object(treasury);
 
     ts::end(scenario);
 }
@@ -571,6 +647,8 @@ fun test_double_claim_rejected() {
     let mut registry = match_manager::create_test_registry(scenario.ctx());
     create_match_with_bet_vault(&mut registry, b"Room", scenario.ctx());
     transfer::public_transfer(registry, @0x0);
+    let treasury = new_test_treasury(scenario.ctx());
+    transfer::public_share_object(treasury);
 
     scenario.next_tx(viewer);
     let mut m: Match = scenario.take_shared();
@@ -591,17 +669,21 @@ fun test_double_claim_rejected() {
     scenario.next_tx(viewer);
     let mut m: Match = scenario.take_shared();
     let mut v: BetVault = scenario.take_shared();
-    claim_viewer_reward(&mut v, &mut m, scenario.ctx());
+    let treasury: Treasury = scenario.take_shared();
+    claim_viewer_reward(&treasury, &mut v, &mut m, scenario.ctx());
     transfer::public_share_object(m);
     transfer::public_share_object(v);
+    transfer::public_share_object(treasury);
 
     scenario.next_tx(viewer);
     let mut m: Match = scenario.take_shared();
     let mut v: BetVault = scenario.take_shared();
-    claim_viewer_reward(&mut v, &mut m, scenario.ctx());
+    let treasury: Treasury = scenario.take_shared();
+    claim_viewer_reward(&treasury, &mut v, &mut m, scenario.ctx());
 
     transfer::public_share_object(m);
     transfer::public_share_object(v);
+    transfer::public_share_object(treasury);
     ts::end(scenario);
 }
 
@@ -616,6 +698,8 @@ fun test_loser_claim_rejected() {
     let mut registry = match_manager::create_test_registry(scenario.ctx());
     create_match_with_bet_vault(&mut registry, b"Room", scenario.ctx());
     transfer::public_transfer(registry, @0x0);
+    let treasury = new_test_treasury(scenario.ctx());
+    transfer::public_share_object(treasury);
 
     scenario.next_tx(viewer_win);
     let mut m: Match = scenario.take_shared();
@@ -644,10 +728,12 @@ fun test_loser_claim_rejected() {
     scenario.next_tx(viewer_lose);
     let mut m: Match = scenario.take_shared();
     let mut v: BetVault = scenario.take_shared();
-    claim_viewer_reward(&mut v, &mut m, scenario.ctx());
+    let treasury: Treasury = scenario.take_shared();
+    claim_viewer_reward(&treasury, &mut v, &mut m, scenario.ctx());
 
     transfer::public_share_object(m);
     transfer::public_share_object(v);
+    transfer::public_share_object(treasury);
     ts::end(scenario);
 }
 
@@ -661,6 +747,8 @@ fun test_claim_fighter_when_lose_rejected() {
     let mut registry = match_manager::create_test_registry(scenario.ctx());
     create_match_with_bet_vault(&mut registry, b"Room", scenario.ctx());
     transfer::public_transfer(registry, @0x0);
+    let treasury = new_test_treasury(scenario.ctx());
+    transfer::public_share_object(treasury);
 
     scenario.next_tx(viewer);
     let mut m: Match = scenario.take_shared();
@@ -681,10 +769,12 @@ fun test_claim_fighter_when_lose_rejected() {
     scenario.next_tx(fighter);
     let mut m: Match = scenario.take_shared();
     let mut v: BetVault = scenario.take_shared();
-    claim_fighter_reward(&mut v, &mut m, scenario.ctx());
+    let treasury: Treasury = scenario.take_shared();
+    claim_fighter_reward(&treasury, &mut v, &mut m, scenario.ctx());
 
     transfer::public_share_object(m);
     transfer::public_share_object(v);
+    transfer::public_share_object(treasury);
     ts::end(scenario);
 }
 
