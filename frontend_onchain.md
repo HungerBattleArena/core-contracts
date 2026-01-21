@@ -111,8 +111,7 @@ Data for fighter UI
 - Room status: `match_view(match).status`
 - Pool + betters: `match_view(match)`
 - Result screen: `match_view(match).result`
-- Reward (if win): `fighter_reward_amount(total_pool)`
-- Reward (net): `preview_reward(match, fighter)` after end
+- Reward (net): `fighter_reward_amount(total_pool) * (10000 - fee_bps()) / 10000`
 
 Viewer flow
 1) Room list (betting open)
