@@ -1,7 +1,8 @@
 Testnet Deployment
 
-- PackageID: 0x3a279f228a55b5629e2a9537202962d60db530ce1af830bf7f1c21faea241e20
-- Registry (Shared): 0x9cc9312556e74d998cb822bfe0a4e5ddcf3e87b831987a609d93dc323c93811a
-- AdminCap: 0xbb9a99f3214cbf7e6e17d529232b6d380ea159557734de76db9682fc68138c30
-- UpgradeCap: 0xce82198f631649a584cca5b0b4517d6551630125af6cdad404d63f65bf234863
-- Publish Digest: DbP7WE2hK4vhCDYCJqouMoLkebFy1jEAqHx7hb9XhUuG
+- PackageID: 0xbc13ff229ee30ea6c95b3f8880e595238dfa0e1cbdb9e6db5db63551ca5d6d7d
+- Registry (Shared): 0x1fa76c2a8af7d88aa2f4028071244439b75fdaa6afb9543df86be16d43947dd5
+- Treasury (Shared): 0x452bb2187385aba910ffb3cb00b3d5bb38da40a41ac891ba56712d8e57652678
+- AdminCap: 0xdd7ddf08d7a934f58a5d8184ab405b6b8b81715cc2f66e6c352f9e85304380f9
+- UpgradeCap: 0xb5d952341ae5551a1725c26602d77668da3d5b1aa1fd3a325c35ee42a0d1388e
+- Publish Digest: 6hF5jTYjkT7srVsmU5RMzV4ZQhXKJtYh3bqN2AAriSve
