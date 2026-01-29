@@ -17,8 +17,13 @@ Modules
 Key shared objects
 - `Registry`: stores `match_ids` for listing.
 - `Match`: a match/room (shared).
-- `BetVault`: OCT pool + claim state (shared).
+- `BetVault`: token pool + claim state (shared).
 - `Treasury`: fee receiver (shared).
+
+Token configuration
+Coin type (Hackathon): `0x8b76fc2a2317d45118770cefed7e57171a08c477ed16283616b15f099391f120::hackathon::HACKATHON`
+Decimals: 9
+
 
 View (read-only functions)
 Use `devInspectTransactionBlock` or SDK view helpers.
@@ -78,9 +83,10 @@ const UserBetView = bcs.struct("UserBetView", {
 
 Fighter flow
 1) Create room + open bets (1 tx, 1 signature)
-- Call `bet_engine::create_match_with_bet_vault(registry, name_bytes, ctx)`
+- Call `bet_engine::create_match_with_bet_vault<T>(registry, name_bytes, ctx)`
 - `registry` is the shared Registry object from `testnet.md`
 - `name_bytes` <= 20 UTF-8 bytes
+- `T` = betting token type (coin type string)
 - Result: creates shared `Match` + `BetVault`; get `match_id` from `MatchCreated` event.
 
 3) Start match
@@ -123,7 +129,7 @@ Viewer flow
 - Read `match_view(match)` for pool + counts.
 - Read `user_bet_view(match, viewer)` to show existing bet (if any).
 - Place bet:
-  - Call `bet_engine::place_bet(vault, match, side, Coin<OCT>, ctx)`
+  - Call `bet_engine::place_bet<T>(vault, match, side, Coin<T>, ctx)`
   - `side`: `SIDE_WIN` or `SIDE_LOSE`
   - Only when status == CREATED.
   - Each address can bet only once per match; fighter cannot bet.
@@ -154,11 +160,11 @@ Use package ID from `testnet.md`:
 - `0x...::match_manager::cancel_match`
 - `0x...::match_manager::get_match_ids`
 - `0x...::match_manager::match_view`
-- `0x...::bet_engine::create_match_with_bet_vault`
-- `0x...::bet_engine::place_bet`
-- `0x...::bet_engine::claim_viewer_reward`
-- `0x...::bet_engine::claim_fighter_reward`
-- `0x...::bet_engine::refund_bet`
+- `0x...::bet_engine::create_match_with_bet_vault` (typeArgs: `[coinType]`)
+- `0x...::bet_engine::place_bet` (typeArgs: `[coinType]`)
+- `0x...::bet_engine::claim_viewer_reward` (typeArgs: `[coinType]`)
+- `0x...::bet_engine::claim_fighter_reward` (typeArgs: `[coinType]`)
+- `0x...::bet_engine::refund_bet` (typeArgs: `[coinType]`)
 - `0x...::bet_engine::user_bet_view`
 - `0x...::bet_engine::preview_reward`
 - `0x...::bet_engine::is_claimed`
