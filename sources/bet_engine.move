@@ -166,11 +166,16 @@ public fun claim_viewer_reward<T>(
         let bet_amount = match_manager::win_bet_amount(m, sender);
         let fighter_reward = fighter_reward_amount(match_manager::total_pool(m));
         let viewers_pool = match_manager::total_pool(m) - fighter_reward;
-        (bet_amount * viewers_pool) / match_manager::win_bets_total(m)
+        let reward_u128 =
+            (bet_amount as u128) * (viewers_pool as u128) / (match_manager::win_bets_total(m) as u128);
+        reward_u128 as u64
     } else {
         assert!(match_manager::has_lose_bet(m, sender), E_NOT_WINNER);
         let bet_amount = match_manager::lose_bet_amount(m, sender);
-        (bet_amount * match_manager::total_pool(m)) / match_manager::lose_bets_total(m)
+        let reward_u128 =
+            (bet_amount as u128) * (match_manager::total_pool(m) as u128)
+                / (match_manager::lose_bets_total(m) as u128);
+        reward_u128 as u64
     };
 
     let fee = fee_amount(reward);
@@ -318,17 +323,19 @@ public fun preview_reward(m: &Match, viewer: address): u64 {
             let bet_amount = match_manager::win_bet_amount(m, viewer);
             let fighter_reward = fighter_reward_amount(match_manager::total_pool(m));
             let viewers_pool = match_manager::total_pool(m) - fighter_reward;
-            let reward = (bet_amount * viewers_pool) / match_manager::win_bets_total(m);
-            net_amount(reward)
+            let reward_u128 =
+                (bet_amount as u128) * (viewers_pool as u128) / (match_manager::win_bets_total(m) as u128);
+            net_amount(reward_u128 as u64)
         }
     } else {
         if (!match_manager::has_lose_bet(m, viewer)) {
             0
         } else {
             let bet_amount = match_manager::lose_bet_amount(m, viewer);
-            let reward =
-                (bet_amount * match_manager::total_pool(m)) / match_manager::lose_bets_total(m);
-            net_amount(reward)
+            let reward_u128 =
+                (bet_amount as u128) * (match_manager::total_pool(m) as u128)
+                    / (match_manager::lose_bets_total(m) as u128);
+            net_amount(reward_u128 as u64)
         }
     }
 }
