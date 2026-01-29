@@ -49,6 +49,6 @@ deps = { MoveStdlib = "MoveStdlib", One = "One" }
 
 [env.testnet]
 chain-id = "1bd5c965"
-original-published-id = "0xc87396954d4926813a9118dd5524355331537004ef0b94db2c54d12605f4937c"
-latest-published-id = "0xc87396954d4926813a9118dd5524355331537004ef0b94db2c54d12605f4937c"
+original-published-id = "0xfa4d30eaf965998f22e1f3cc06bbe293e54ec2591252ab7e3903f504f2cd599f"
+latest-published-id = "0xfa4d30eaf965998f22e1f3cc06bbe293e54ec2591252ab7e3903f504f2cd599f"
 published-version = "1"
