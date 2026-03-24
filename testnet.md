@@ -1,8 +1,8 @@
 Testnet Deployment
 
-- PackageID: 0xfa4d30eaf965998f22e1f3cc06bbe293e54ec2591252ab7e3903f504f2cd599f
-- Registry (Shared): 0xc8c62d9f0be715b6f54e2871548dca7ffb01a065b2ac086e344bd430419b3548
-- Treasury (Shared): 0xcb9ee7a185fa867769a1de724a867455e6ca8ad08e186b50d118e9bc7301153c
-- AdminCap: 0x7d259e5ce4d2f9e8d9f46ac44e5cbba964fe91841c0d32a5582823000a9b3377
-- UpgradeCap: 0xaef8f99eaef4657f5c4255d2558390336af56992d1fed222334b74d720bfb677
-- Publish Digest: AnCSRfJBuKTjE1egX72WbQNEbdBKfaWA1kjmKEgLEsdY
+- PackageID: 0x995fcc2d750402efe72c4f282bda7c19148d4466d182a3b4730ba622828f87e4
+- Registry (Shared): 0xfc4b25d205745f138af8ebc4df1f69f0459d7dee6a5b7aadc42d331574231043
+- Treasury (Shared): 0x466fc8fe208bcc5c49fc9badfd86b5a25116243a85d714ffe8ccb3b9ccf14cf6
+- AdminCap: 0xccc9fd9ab76b946f31a66a24b93c62122f9d3c98c6735feae926317eca5dfa82
+- UpgradeCap: 0x464fbac6a651f69aaed25328f7ae9bae159a75a9faeb58535b5cbae5005730d2
+- Publish Digest: 5Y6JU4FFyH1z6yfmu83xXj9YpFhTaN2sbPm97onPYP79
