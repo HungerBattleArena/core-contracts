@@ -19,6 +19,9 @@ const E_NOT_IN_GAME: u64 = 4;
 const E_NAME_TOO_LONG: u64 = 5;
 const E_VAULT_ALREADY_SET: u64 = 6;
 const E_NOT_CANCELABLE: u64 = 7;
+const E_START_REQUIRES_BOTH_SIDES: u64 = 8;
+const E_TWO_SIDES_ALREADY_MET: u64 = 10;
+const DEFAULT_FIGHTER_STAKE: u64 = 10;
 
 /* ===================== EVENTS ===================== */
 
@@ -58,8 +61,10 @@ public struct MatchView has copy, drop, store {
     vault_id: Option<object::ID>,
     name: String,
     fighter: address,
+    fighter_stake: u64,
     status: u8,
     result: Option<bool>,
+    cancel_stake_refundable: bool,
     total_pool: u64,
     total_bet_viewers: u64,
     win_bets_total: u64,
@@ -82,8 +87,10 @@ public struct Match has key, store {
     vault_id: Option<object::ID>,
     name: String,
     fighter: address,
+    fighter_stake: u64,
     status: u8,
     result: Option<bool>,
+    cancel_stake_refundable: bool,
     total_pool: u64,
     total_bet_viewers: u64,
     win_bets_total: u64,
@@ -125,8 +132,10 @@ public(package) fun create_match_internal(
         vault_id: option::none(),
         name,
         fighter,
+        fighter_stake: DEFAULT_FIGHTER_STAKE,
         status: CREATED,
         result: option::none(),
+        cancel_stake_refundable: false,
         total_pool: 0,
         total_bet_viewers: 0,
         win_bets_total: 0,
@@ -151,6 +160,7 @@ public(package) fun create_match_internal(
 public fun start_match(m: &mut Match, ctx: &mut TxContext) {
     assert!(m.status == CREATED, E_INVALID_STATE);
     assert!(tx_context::sender(ctx) == m.fighter, E_NOT_FIGHTER);
+    assert!(m.win_bets_total > 0 && m.lose_bets_total > 0, E_START_REQUIRES_BOTH_SIDES);
 
     m.status = IN_GAME;
 
@@ -178,12 +188,28 @@ public fun end_match(
     });
 }
 
-public fun cancel_match(_: &AdminCap, m: &mut Match) {
+public(package) fun cancel_match_with_refund(m: &mut Match) {
+    assert!(m.status == CREATED, E_NOT_CANCELABLE);
+    assert!(option::is_none(&m.result), E_ALREADY_ENDED);
+    assert!(!(m.win_bets_total > 0 && m.lose_bets_total > 0), E_TWO_SIDES_ALREADY_MET);
+
+    m.status = CANCELLED;
+    m.result = option::none();
+    m.cancel_stake_refundable = true;
+
+    event::emit(MatchCancelled {
+        match_id: object::id(m),
+        fighter: m.fighter,
+    });
+}
+
+public(package) fun cancel_match_with_slash(m: &mut Match) {
     assert!(m.status == CREATED || m.status == IN_GAME, E_NOT_CANCELABLE);
     assert!(option::is_none(&m.result), E_ALREADY_ENDED);
 
     m.status = CANCELLED;
     m.result = option::none();
+    m.cancel_stake_refundable = false;
 
     event::emit(MatchCancelled {
         match_id: object::id(m),
@@ -203,8 +229,10 @@ public fun match_view(m: &Match): MatchView {
         vault_id: m.vault_id,
         name: m.name,
         fighter: m.fighter,
+        fighter_stake: m.fighter_stake,
         status: m.status,
         result: m.result,
+        cancel_stake_refundable: m.cancel_stake_refundable,
         total_pool: m.total_pool,
         total_bet_viewers: m.total_bet_viewers,
         win_bets_total: m.win_bets_total,
@@ -234,8 +262,24 @@ public(package) fun fighter(m: &Match): address {
     m.fighter
 }
 
+public(package) fun fighter_stake(m: &Match): u64 {
+    m.fighter_stake
+}
+
+public fun default_fighter_stake(): u64 {
+    DEFAULT_FIGHTER_STAKE
+}
+
 public(package) fun result_value(m: &Match): bool {
     *option::borrow(&m.result)
+}
+
+public(package) fun has_two_sided_bets(m: &Match): bool {
+    m.win_bets_total > 0 && m.lose_bets_total > 0
+}
+
+public(package) fun cancel_stake_refundable(m: &Match): bool {
+    m.status == CANCELLED && m.cancel_stake_refundable
 }
 
 public(package) fun has_win_bet(m: &Match, bettor: address): bool {
@@ -302,8 +346,10 @@ public(package) fun create_test_match(fighter: address, ctx: &mut TxContext): Ma
         vault_id: option::none(),
         name: string::utf8(b"TestMatch"),
         fighter,
+        fighter_stake: DEFAULT_FIGHTER_STAKE,
         status: CREATED,
         result: option::none(),
+        cancel_stake_refundable: false,
         total_pool: 0,
         total_bet_viewers: 0,
         win_bets_total: 0,
@@ -352,11 +398,15 @@ fun test_create_match_success() {
 fun test_start_match_success() {
     let mut ctx = tx_context::dummy();
     let fighter = tx_context::sender(&ctx);
+    let viewer_win = @0xB;
+    let viewer_lose = @0xC;
 
     let mut registry = create_test_registry(&mut ctx);
     let m_created = create_match_internal(&mut registry, b"TestMatch", &mut ctx);
 
     let mut m = create_test_match(fighter, &mut ctx);
+    add_win_bet(&mut m, viewer_win, 10);
+    add_lose_bet(&mut m, viewer_lose, 10);
     start_match(&mut m, &mut ctx);
 
     assert!(m.status == IN_GAME, 1);
@@ -394,15 +444,14 @@ fun test_cancel_match_created() {
     let mut ctx = tx_context::dummy();
     let fighter = tx_context::sender(&ctx);
 
-    let admin = create_test_admin(&mut ctx);
     let mut m = create_test_match(fighter, &mut ctx);
-    cancel_match(&admin, &mut m);
+    cancel_match_with_refund(&mut m);
 
     assert!(m.status == CANCELLED, 1);
     assert!(option::is_none(&m.result), 2);
+    assert!(m.cancel_stake_refundable, 3);
 
     transfer::transfer(m, @0x0);
-    transfer::transfer(admin, @0x0);
 }
 
 #[test]
@@ -410,16 +459,15 @@ fun test_cancel_match_in_game() {
     let mut ctx = tx_context::dummy();
     let fighter = tx_context::sender(&ctx);
 
-    let admin = create_test_admin(&mut ctx);
     let mut m = create_test_match(fighter, &mut ctx);
     m.status = IN_GAME;
-    cancel_match(&admin, &mut m);
+    cancel_match_with_slash(&mut m);
 
     assert!(m.status == CANCELLED, 1);
     assert!(option::is_none(&m.result), 2);
+    assert!(!m.cancel_stake_refundable, 3);
 
     transfer::transfer(m, @0x0);
-    transfer::transfer(admin, @0x0);
 }
 
 /* ---------- view ---------- */
@@ -436,10 +484,12 @@ fun test_match_view() {
     assert!(option::is_none(&v.vault_id), 1);
     assert!(v.name == string::utf8(b"TestMatch"), 2);
     assert!(v.fighter == fighter, 3);
-    assert!(v.status == CREATED, 4);
-    assert!(option::is_none(&v.result), 5);
-    assert!(v.total_pool == 0, 6);
-    assert!(v.total_bet_viewers == 0, 7);
+    assert!(v.fighter_stake == DEFAULT_FIGHTER_STAKE, 4);
+    assert!(v.status == CREATED, 5);
+    assert!(option::is_none(&v.result), 6);
+    assert!(!v.cancel_stake_refundable, 7);
+    assert!(v.total_pool == 0, 8);
+    assert!(v.total_bet_viewers == 0, 9);
 
     transfer::public_share_object(m);
 }
