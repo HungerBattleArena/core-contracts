@@ -21,7 +21,8 @@ const E_VAULT_ALREADY_SET: u64 = 6;
 const E_NOT_CANCELABLE: u64 = 7;
 const E_START_REQUIRES_BOTH_SIDES: u64 = 8;
 const E_TWO_SIDES_ALREADY_MET: u64 = 10;
-const DEFAULT_FIGHTER_STAKE: u64 = 10;
+const COIN_DECIMALS_FACTOR: u64 = 1000000000;
+const DEFAULT_FIGHTER_STAKE: u64 = 10 * COIN_DECIMALS_FACTOR;
 
 /* ===================== EVENTS ===================== */
 
@@ -375,6 +376,11 @@ public(package) fun set_status_in_game(m: &mut Match) {
     m.status = IN_GAME;
 }
 
+#[test_only]
+public(package) fun test_units(amount: u64): u64 {
+    amount * COIN_DECIMALS_FACTOR
+}
+
 /* ---------- create_match ---------- */
 
 #[test]
@@ -405,8 +411,8 @@ fun test_start_match_success() {
     let m_created = create_match_internal(&mut registry, b"TestMatch", &mut ctx);
 
     let mut m = create_test_match(fighter, &mut ctx);
-    add_win_bet(&mut m, viewer_win, 10);
-    add_lose_bet(&mut m, viewer_lose, 10);
+    add_win_bet(&mut m, viewer_win, test_units(10));
+    add_lose_bet(&mut m, viewer_lose, test_units(10));
     start_match(&mut m, &mut ctx);
 
     assert!(m.status == IN_GAME, 1);
