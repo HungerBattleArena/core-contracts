@@ -26,13 +26,13 @@ Decimals: 9
 
 Economic model used by the current contracts
 - Fighter stake is fixed by contract: `default_fighter_stake()`
-- Current fighter stake: `10`
+- Current fighter stake: `10 HACKATHON` (`10000000000` base units)
 - Frontend should not let the fighter choose an arbitrary stake amount
 - Match can start only when both `WIN` pool and `LOSE` pool are greater than 0
 - Fighter share = 20% of losing-side pool on fighter win
 - Fee = 2% of each winner claim
-- Minimum bet = 1
-- Maximum bet = 1000
+- Minimum bet = `1 HACKATHON` (`1000000000` base units)
+- Maximum bet = `1000 HACKATHON` (`1000000000000` base units)
 - If fighter wins:
   - fighter claim = `fighter stake + 20% of losing-side pool`, then 2% fee
   - winning viewers split the remaining losing-side pool proportionally, then each viewer also pays 2% fee on their claim

@@ -30,13 +30,13 @@ MVP gameplay flow
 
 ### Fighter stake
 - The fighter stake is fixed by contract, not user-defined.
-- Current default fighter stake: `10`
+- Current default fighter stake: `10 HACKATHON` (`10000000000` base units)
 - The fighter must deposit exactly the default stake amount when creating a match.
 
 ### Betting
 - Viewers bet on `WIN` or `LOSE`.
-- Minimum bet: `1`
-- Maximum bet: `1000`
+- Minimum bet: `1 HACKATHON` (`1000000000` base units)
+- Maximum bet: `1000 HACKATHON` (`1000000000000` base units)
 - Each address can bet only once per match.
 - The fighter cannot bet in their own match.
 - Bets are only accepted while the match is in `CREATED`.
