@@ -208,9 +208,8 @@ public fun claim_viewer_reward<T>(
     };
 
     let bet_amount = winning_bet_amount(m, sender);
-    let gross_claim = bet_amount + reward;
-    let fee = fee_amount(gross_claim);
-    let payout_amount = gross_claim - fee;
+    let fee = fee_amount(reward);
+    let payout_amount = bet_amount + reward - fee;
 
     table::add(&mut vault.claimed, sender, true);
 
@@ -249,9 +248,8 @@ public fun claim_fighter_reward<T>(
     assert!(is_win, E_FIGHTER_LOST);
 
     let reward = fighter_reward_amount(m);
-    let gross_claim = match_manager::fighter_stake(m) + reward;
-    let fee = fee_amount(gross_claim);
-    let payout_amount = gross_claim - fee;
+    let fee = fee_amount(reward);
+    let payout_amount = match_manager::fighter_stake(m) + reward - fee;
     vault.fighter_claimed = true;
 
     if (payout_amount > 0) {
@@ -448,8 +446,8 @@ public fun preview_reward(m: &Match, viewer: address): u64 {
             let reward_u128 =
                 (bet_amount as u128) * (viewers_reward_pool as u128)
                     / (match_manager::win_bets_total(m) as u128);
-            let gross_claim = bet_amount + (reward_u128 as u64);
-            net_amount(gross_claim)
+            let profit = reward_u128 as u64;
+            bet_amount + net_amount(profit)
         }
     } else {
         if (!match_manager::has_lose_bet(m, viewer)) {
@@ -459,8 +457,8 @@ public fun preview_reward(m: &Match, viewer: address): u64 {
             let reward_u128 =
                 (bet_amount as u128) * (match_manager::win_bets_total(m) as u128)
                     / (match_manager::lose_bets_total(m) as u128);
-            let gross_claim = bet_amount + (reward_u128 as u64);
-            net_amount(gross_claim)
+            let profit = reward_u128 as u64;
+            bet_amount + net_amount(profit)
         }
     }
 }
@@ -566,7 +564,7 @@ fun test_preview_reward_win() {
     match_manager::end_match(&admin, &mut m, true);
     match_manager::destroy_test_admin(admin);
 
-    assert!(preview_reward(&m, viewer_win) == 137200000000, 1);
+    assert!(preview_reward(&m, viewer_win) == 139200000000, 1);
 
     transfer::public_transfer(m, @0x0);
     transfer::transfer(v, @0x0);
@@ -594,7 +592,7 @@ fun test_preview_reward_lose() {
     match_manager::end_match(&admin, &mut m, false);
     match_manager::destroy_test_admin(admin);
 
-    assert!(preview_reward(&m, viewer_lose) == test_units(98), 1);
+    assert!(preview_reward(&m, viewer_lose) == 99600000000, 1);
 
     transfer::public_transfer(m, @0x0);
     transfer::transfer(v, @0x0);
@@ -712,9 +710,9 @@ fun test_bet_and_claim_flow() {
     let mut m: Match = scenario.take_shared();
     let mut v: BetVault<OCT> = scenario.take_shared();
     let treasury: Treasury = scenario.take_shared();
-    assert!(preview_reward(&m, viewer_win) == 137200000000, 1);
+    assert!(preview_reward(&m, viewer_win) == 139200000000, 1);
     claim_viewer_reward(&treasury, &mut v, &mut m, scenario.ctx());
-    assert!(coin::value(&v.viewer_pool) == test_units(10), 2);
+    assert!(coin::value(&v.viewer_pool) == 10000000000, 2);
     assert!(coin::value(&v.fighter_stake) == match_manager::default_fighter_stake(), 3);
     assert!(table::contains(&v.claimed, viewer_win), 3);
     transfer::public_share_object(m);
