@@ -64,11 +64,10 @@ If fighter loses:
   - a proportional share of the WIN-side pool
 
 ### Fee
-- Fee = `2%` of each winner claim
+- Fee = `2%` of profit only
 - The fee is transferred to `Treasury.admin`
-- Winner claim means:
-  - viewer winning claim
-  - fighter winning claim
+- For viewers, fee applies only to the amount won from the opposing side pool, not to the original bet
+- For the fighter, fee applies only to the `20%` reward from the losing-side pool, not to the returned fighter stake
 
 ### Cancel behavior
 If the fighter cancels before both sides are funded:
@@ -241,6 +240,8 @@ Let:
 Then:
 - fighter gross claim = `fighter_stake + fighter_share`
 - each winning viewer gross claim = `viewer_win_bet + (viewer_win_bet / W) * (L - fighter_share)`
+ - viewer net claim = `viewer_win_bet + ((viewer_win_bet / W) * (L - fighter_share)) * 98%`
+ - fighter net claim = `fighter_stake + fighter_share * 98%`
 
 ### 2. Fighter loses
 Let:
@@ -250,9 +251,10 @@ Let:
 Then:
 - fighter gross claim = `0`
 - each winning LOSE viewer gross claim = `viewer_lose_bet + (viewer_lose_bet / L) * W`
+ - viewer net claim = `viewer_lose_bet + ((viewer_lose_bet / L) * W) * 98%`
 
 ### 3. Fee deduction
-- net claim = `gross_claim - 2%`
+- Fee is deducted only from profit, not from principal
 
 ## Safety checks
 - `BetVault.claimed` prevents viewer double claim

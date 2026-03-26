@@ -30,14 +30,14 @@ Economic model used by the current contracts
 - Frontend should not let the fighter choose an arbitrary stake amount
 - Match can start only when both `WIN` pool and `LOSE` pool are greater than 0
 - Fighter share = 20% of losing-side pool on fighter win
-- Fee = 2% of each winner claim
+- Fee = 2% of profit only
 - Minimum bet = `1 HACKATHON` (`1000000000` base units)
 - Maximum bet = `1000 HACKATHON` (`1000000000000` base units)
 - If fighter wins:
-  - fighter claim = `fighter stake + 20% of losing-side pool`, then 2% fee
-  - winning viewers split the remaining losing-side pool proportionally, then each viewer also pays 2% fee on their claim
+  - fighter claim = `fighter stake + 20% of losing-side pool`, and the 2% fee is charged only on the `20%` profit part
+  - winning viewers split the remaining losing-side pool proportionally, and each viewer pays 2% fee only on the profit part, not on the original bet
 - If fighter loses:
-  - LOSE-side viewers split the WIN-side pool proportionally and pay 2% fee on each claim
+  - LOSE-side viewers split the WIN-side pool proportionally and pay 2% fee only on the profit part
 - If match is cancelled before both sides are funded:
   - viewers refund bets manually
   - fighter claims stake back manually
@@ -65,7 +65,7 @@ Use `devInspectTransactionBlock` or SDK view helpers.
 - `treasury_admin(treasury) -> address`
 
 Notes for frontend
-- `preview_reward` already returns net amount after the 2% fee
+- `preview_reward` already returns net amount after the 2% profit-only fee
 - `is_fighter_claimed(vault)` is used for both fighter reward claim and fighter stake claim/slash settlement
 - `pool_balance(vault)` includes both viewer pool and fighter stake
 
@@ -171,8 +171,9 @@ Data for fighter UI
 - Room stake: `match_view(match).fighter_stake`
 - Cancel refund flag: `match_view(match).cancel_stake_refundable`
 - Fighter reward preview after end:
-  - gross fighter win reward = `fighter_stake + fighter_reward_amount(match)`
-  - net reward = `gross * (10000 - fee_bps()) / 10000`
+  - profit = `fighter_reward_amount(match)`
+  - gross fighter win reward = `fighter_stake + profit`
+  - net reward = `fighter_stake + profit * (10000 - fee_bps()) / 10000`
 
 Viewer flow
 1) Room list
